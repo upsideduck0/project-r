@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Project R</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: #0b0d14;
+        color: #e6e6e6;
+        font-family: system-ui, sans-serif;
+        height: 100%;
+        overflow: hidden;
+      }
+      #game {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+      }
+      .hint {
+        position: fixed;
+        top: 8px;
+        left: 8px;
+        font-size: 12px;
+        opacity: 0.7;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game"></div>
+    <div class="hint">A/D or arrows = move &middot; Space/W = jump &middot; J or click = attack</div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
