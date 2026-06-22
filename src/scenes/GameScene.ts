@@ -84,6 +84,7 @@ export class GameScene extends Phaser.Scene {
   private inventory!: Inventory;
   private hotbarUI!: HotbarUI;
   private inventoryUI!: InventoryUI;
+  private weaponVisual!: Phaser.GameObjects.Image;
   private battleMode = false;
 
   constructor() {
@@ -184,6 +185,13 @@ export class GameScene extends Phaser.Scene {
       this.hotbarUI.refresh(),
     );
 
+    this.weaponVisual = this.add
+      .image(this.player.x, this.player.y, "icon-iron-sword")
+      .setScale(0.55)
+      .setOrigin(0.4, 0.7)
+      .setVisible(false)
+      .setDepth(this.player.depth + 1);
+
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
     this.cameras.main.setDeadzone(120, 80);
 
@@ -204,6 +212,20 @@ export class GameScene extends Phaser.Scene {
     const dt = delta / 1000;
     const body = this.player.body as Phaser.Physics.Arcade.Body;
 
+    // Process discrete inputs FIRST so dash/jump state is up-to-date before
+    // we derive movement from it (fixes Space-after-Q/E swallowing the jump).
+    if (Phaser.Input.Keyboard.JustDown(this.keySpace)) this.tryJump();
+    if (Phaser.Input.Keyboard.JustDown(this.keyQ)) this.tryDash(-1);
+    if (Phaser.Input.Keyboard.JustDown(this.keyE)) this.tryDash(1);
+    if (Phaser.Input.Keyboard.JustDown(this.keyW)) this.tryStepUp();
+    if (Phaser.Input.Keyboard.JustDown(this.keyS)) this.tryDropThrough();
+    if (Phaser.Input.Keyboard.JustDown(this.keyTab)) this.inventoryUI.toggle();
+    for (let i = 0; i < this.hotbarKeys.length; i++) {
+      if (Phaser.Input.Keyboard.JustDown(this.hotbarKeys[i])) {
+        this.hotbarUI.setSelected(i);
+      }
+    }
+
     const dashing = now < this.player.dashUntil;
 
     const left = this.cursors.left?.isDown || this.keyA.isDown;
@@ -222,18 +244,6 @@ export class GameScene extends Phaser.Scene {
       }
     } else {
       body.setVelocityX(DASH_SPEED * this.player.dashDir);
-    }
-
-    if (Phaser.Input.Keyboard.JustDown(this.keySpace)) this.tryJump();
-    if (Phaser.Input.Keyboard.JustDown(this.keyQ)) this.tryDash(-1);
-    if (Phaser.Input.Keyboard.JustDown(this.keyE)) this.tryDash(1);
-    if (Phaser.Input.Keyboard.JustDown(this.keyW)) this.tryStepUp();
-    if (Phaser.Input.Keyboard.JustDown(this.keyS)) this.tryDropThrough();
-    if (Phaser.Input.Keyboard.JustDown(this.keyTab)) this.inventoryUI.toggle();
-    for (let i = 0; i < this.hotbarKeys.length; i++) {
-      if (Phaser.Input.Keyboard.JustDown(this.hotbarKeys[i])) {
-        this.hotbarUI.setSelected(i);
-      }
     }
 
     body.setAllowGravity(!dashing);
@@ -257,6 +267,18 @@ export class GameScene extends Phaser.Scene {
     });
 
     if (this.player.y > WORLD_HEIGHT + 100) this.damagePlayer(PLAYER_MAX_HP);
+
+    if (this.battleMode) {
+      const swinging = now - this.player.lastAttackAt < ATTACK_DURATION_MS;
+      const tilt = swinging ? this.player.facing * 0.9 : this.player.facing * 0.25;
+      this.weaponVisual
+        .setPosition(this.player.x + this.player.facing * 9, this.player.y + 6)
+        .setRotation(tilt)
+        .setFlipX(this.player.facing === -1)
+        .setVisible(true);
+    } else {
+      this.weaponVisual.setVisible(false);
+    }
 
     this.player.stamina = Math.min(
       MAX_STAMINA,
