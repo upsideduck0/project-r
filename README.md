@@ -17,11 +17,19 @@ npm run dev
 
 Then open the URL Vite prints (default http://localhost:5173).
 
-## Controls
-- Move: `A` / `D` or arrow keys
-- Jump: `Space`, `W`, or up arrow
+## Controls (Roguelands-inspired)
+- Move left/right: `A` / `D`
+- Jump: `Space` — chainable (infinite, but each press is min 200ms apart; a
+  new press cancels the remaining upward velocity of the previous jump)
+- Dash left / right: `Q` / `E` — usable mid-air, chainable (min 100ms apart;
+  a new dash cancels the remaining distance of the previous one)
+- Step up onto one-way platform above: `W`
+- Drop through one-way platform: `S`
 - Attack: `J` or left mouse click
 - Restart after death: `R`
+
+Jumps and dashes consume **stamina**; **mana** regenerates passively and is
+reserved for skills added later.
 
 ## What's in the prototype
 - Side-scrolling level with ground and platforms
