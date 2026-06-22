@@ -8,12 +8,10 @@ const PLAYER_SPEED = 220;
 const PLAYER_MAX_HP = 100;
 
 const JUMP_VELOCITY = 440;
-const JUMP_MIN_INTERVAL_MS = 200;
 const JUMP_STAMINA_COST = 15;
 
 const DASH_SPEED = 620;
 const DASH_DURATION_MS = 160;
-const DASH_MIN_INTERVAL_MS = 100;
 const DASH_STAMINA_COST = 25;
 
 const STEP_UP_VELOCITY = 360;
@@ -235,21 +233,22 @@ export class GameScene extends Phaser.Scene {
   }
 
   private tryJump(): void {
-    const now = this.time.now;
-    if (now - this.player.lastJumpAt < JUMP_MIN_INTERVAL_MS) return;
     if (this.player.stamina < JUMP_STAMINA_COST) return;
     this.player.stamina -= JUMP_STAMINA_COST;
-    this.player.lastJumpAt = now;
+    this.player.lastJumpAt = this.time.now;
+    // Latest-wins: cancel any in-progress dash, then apply jump impulse.
+    this.player.dashUntil = 0;
     const body = this.player.body as Phaser.Physics.Arcade.Body;
+    body.setAllowGravity(true);
     body.setVelocityY(-JUMP_VELOCITY);
   }
 
   private tryDash(dir: 1 | -1): void {
-    const now = this.time.now;
-    if (now - this.player.lastDashAt < DASH_MIN_INTERVAL_MS) return;
     if (this.player.stamina < DASH_STAMINA_COST) return;
     this.player.stamina -= DASH_STAMINA_COST;
+    const now = this.time.now;
     this.player.lastDashAt = now;
+    // Latest-wins: a new dash always overrides whatever is in flight.
     this.player.dashUntil = now + DASH_DURATION_MS;
     this.player.dashDir = dir;
     this.player.facing = dir;
