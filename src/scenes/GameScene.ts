@@ -1,4 +1,8 @@
 import Phaser from "phaser";
+import { Inventory } from "../systems/Inventory";
+import { HotbarUI } from "../ui/HotbarUI";
+import { InventoryUI } from "../ui/InventoryUI";
+import { ITEMS, buildItemIcons } from "../data/items";
 
 const WORLD_WIDTH = 2880;
 const WORLD_HEIGHT = 540;
@@ -70,11 +74,17 @@ export class GameScene extends Phaser.Scene {
   private keyS!: Phaser.Input.Keyboard.Key;
   private keyQ!: Phaser.Input.Keyboard.Key;
   private keyE!: Phaser.Input.Keyboard.Key;
-  private keyJ!: Phaser.Input.Keyboard.Key;
+  private keyTab!: Phaser.Input.Keyboard.Key;
   private keySpace!: Phaser.Input.Keyboard.Key;
+  private hotbarKeys: Phaser.Input.Keyboard.Key[] = [];
 
   private hud!: Phaser.GameObjects.Graphics;
   private hudText!: Phaser.GameObjects.Text;
+
+  private inventory!: Inventory;
+  private hotbarUI!: HotbarUI;
+  private inventoryUI!: InventoryUI;
+  private battleMode = false;
 
   constructor() {
     super("GameScene");
@@ -85,6 +95,7 @@ export class GameScene extends Phaser.Scene {
     this.makePixelTexture("px-enemy", 22, 22, 0xff6f7a, 0x5a2530);
     this.makePixelTexture("px-ground", 64, 16, 0x3a3f55, 0x1c1f2b);
     this.makePixelTexture("px-platform", 96, 12, 0x4a5072, 0x252a3d);
+    buildItemIcons(this);
   }
 
   create(): void {
@@ -143,13 +154,35 @@ export class GameScene extends Phaser.Scene {
     this.keyS = kb.addKey(Phaser.Input.Keyboard.KeyCodes.S);
     this.keyQ = kb.addKey(Phaser.Input.Keyboard.KeyCodes.Q);
     this.keyE = kb.addKey(Phaser.Input.Keyboard.KeyCodes.E);
-    this.keyJ = kb.addKey(Phaser.Input.Keyboard.KeyCodes.J);
     this.keySpace = kb.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    this.keyTab = kb.addKey(Phaser.Input.Keyboard.KeyCodes.TAB);
+    kb.addCapture("TAB");
+    const digitCodes = [
+      Phaser.Input.Keyboard.KeyCodes.ONE,
+      Phaser.Input.Keyboard.KeyCodes.TWO,
+      Phaser.Input.Keyboard.KeyCodes.THREE,
+      Phaser.Input.Keyboard.KeyCodes.FOUR,
+      Phaser.Input.Keyboard.KeyCodes.FIVE,
+      Phaser.Input.Keyboard.KeyCodes.SIX,
+      Phaser.Input.Keyboard.KeyCodes.SEVEN,
+      Phaser.Input.Keyboard.KeyCodes.EIGHT,
+      Phaser.Input.Keyboard.KeyCodes.NINE,
+      Phaser.Input.Keyboard.KeyCodes.ZERO,
+    ];
+    this.hotbarKeys = digitCodes.map((c) => kb.addKey(c));
+
     this.input.mouse?.disableContextMenu();
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-      if (pointer.rightButtonDown()) this.tryRightClick();
-      else this.tryAttack();
+      if (pointer.button === 2) this.toggleBattleMode();
+      else if (pointer.button === 0) this.onLeftClick();
     });
+
+    this.inventory = new Inventory();
+    this.seedInventory();
+    this.hotbarUI = new HotbarUI(this, this.inventory);
+    this.inventoryUI = new InventoryUI(this, this.inventory, () =>
+      this.hotbarUI.refresh(),
+    );
 
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
     this.cameras.main.setDeadzone(120, 80);
@@ -196,7 +229,12 @@ export class GameScene extends Phaser.Scene {
     if (Phaser.Input.Keyboard.JustDown(this.keyE)) this.tryDash(1);
     if (Phaser.Input.Keyboard.JustDown(this.keyW)) this.tryStepUp();
     if (Phaser.Input.Keyboard.JustDown(this.keyS)) this.tryDropThrough();
-    if (Phaser.Input.Keyboard.JustDown(this.keyJ)) this.tryAttack();
+    if (Phaser.Input.Keyboard.JustDown(this.keyTab)) this.inventoryUI.toggle();
+    for (let i = 0; i < this.hotbarKeys.length; i++) {
+      if (Phaser.Input.Keyboard.JustDown(this.hotbarKeys[i])) {
+        this.hotbarUI.setSelected(i);
+      }
+    }
 
     body.setAllowGravity(!dashing);
     if (dashing) body.setVelocityY(0);
@@ -297,9 +335,33 @@ export class GameScene extends Phaser.Scene {
     return playerBottom <= platTop + 4 && body.velocity.y >= 0;
   }
 
-  private tryRightClick(): void {
-    // Placeholder: right-click now reaches the game (browser context menu
-    // is disabled). Wire this to a secondary action (block, skill, etc.).
+  private onLeftClick(): void {
+    if (this.inventoryUI.open) return;
+    if (this.battleMode) this.tryAttack();
+    // else: out-of-combat "interact with environment" — no interactables yet.
+  }
+
+  private toggleBattleMode(): void {
+    if (this.inventoryUI.open) return;
+    this.battleMode = !this.battleMode;
+    this.hotbarUI.setBattleMode(this.battleMode);
+    this.player.setTint(this.battleMode ? 0xffd060 : 0xffffff);
+    this.time.delayedCall(80, () => this.player.clearTint());
+  }
+
+  private seedInventory(): void {
+    this.giveItem("iron_sword", 1);
+    this.giveItem("hp_potion", 3);
+    this.giveItem("mp_potion", 2);
+    this.giveItem("fireball", 1);
+    this.giveItem("heal", 1);
+    this.giveItem("wood", 12);
+  }
+
+  private giveItem(id: string, count: number): void {
+    const def = ITEMS[id];
+    if (!def) return;
+    this.inventory.addItem(id, count, def.maxStack);
   }
 
   private tryAttack(): void {

@@ -25,7 +25,10 @@ Then open the URL Vite prints (default http://localhost:5173).
   a new dash cancels the remaining distance of the previous one)
 - Step up onto one-way platform above: `W`
 - Drop through one-way platform: `S`
-- Attack: `J` or left mouse click
+- Toggle weapon drawn (battle mode): right-click
+- Left-click: interact with environment (sheathed) / attack (drawn)
+- Select hotbar slot: `1`–`9`, `0` (slot 10)
+- Open/close inventory: `Tab` — drag items between any slots, Terraria-style
 - Restart after death: `R`
 
 Jumps and dashes consume **stamina**; **mana** regenerates passively and is
