@@ -147,7 +147,11 @@ export class GameScene extends Phaser.Scene {
     this.keyE = kb.addKey(Phaser.Input.Keyboard.KeyCodes.E);
     this.keyJ = kb.addKey(Phaser.Input.Keyboard.KeyCodes.J);
     this.keySpace = kb.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-    this.input.on("pointerdown", () => this.tryAttack());
+    this.input.mouse?.disableContextMenu();
+    this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      if (pointer.rightButtonDown()) this.tryRightClick();
+      else this.tryAttack();
+    });
 
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
     this.cameras.main.setDeadzone(120, 80);
@@ -292,6 +296,11 @@ export class GameScene extends Phaser.Scene {
     const platTop = plat.y - plat.displayHeight / 2;
     const playerBottom = this.player.y + body.halfHeight;
     return playerBottom <= platTop + 4 && body.velocity.y >= 0;
+  }
+
+  private tryRightClick(): void {
+    // Placeholder: right-click now reaches the game (browser context menu
+    // is disabled). Wire this to a secondary action (block, skill, etc.).
   }
 
   private tryAttack(): void {
