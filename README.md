@@ -1,12 +1,8 @@
 # project-r
 
 A 2D side-scrolling action prototype inspired by Roguelands, built with
-Phaser 3 and TypeScript. Currently a focused combat sandbox.
-
-## Stack
-- Phaser 3 (game engine)
-- TypeScript
-- Vite (dev server / bundler)
+Phaser 3 and TypeScript. Currently a combat sandbox covering movement,
+weapons, enemies, and skills.
 
 ## Run
 
@@ -15,52 +11,60 @@ npm install
 npm run dev
 ```
 
-Then open the URL Vite prints (default http://localhost:5173).
-
 ## Controls
 
 Movement
 - Move left/right: `A` / `D`
-- Jump: `Space` — chainable, costs stamina; cancels any in-progress dash
-- Dash left / right: `Q` / `E` — usable mid-air, latest dash overrides
-- Step up onto one-way platform above: `W`
+- Jump: `Space` (chainable, costs stamina; cancels current dash)
+- Dash left/right: `Q` / `E` (usable mid-air, latest wins)
+- Step up onto one-way platform: `W`
 - Drop through one-way platform: `S`
 
 Combat
-- Toggle Combat Mode: right-click (weapon becomes visible and left-click
-  attacks; out of combat, left-click is reserved for environment interaction)
-- Attack with equipped weapon: left-click (combat mode only); ranged and
-  magic projectiles aim toward the mouse cursor
-- Switch weapons: `1` Wooden Sword, `2` Wooden Bow, `3` Wooden Staff
+- Toggle Combat Mode: right-click
+- Attack with current weapon: left-click (combat mode only); ranged/magic
+  shots aim at the mouse cursor
+- Switch weapon: `Z` Wooden Sword, `X` Wooden Bow, `C` Wooden Staff
+
+Hotbar (10 slots at bottom-center, `1`–`9`, `0`)
+- In Exploration mode: hotbar is the utility bar. Slot 1 = HP potion,
+  slot 2 = MP potion. Pressing the number drinks the potion if useful.
+- In Combat mode: hotbar is the skill bar. Pressing the number casts the
+  skill in that slot (cooldown and mana cost permitting). Cooldowns are
+  drawn as a darkening fill with seconds remaining.
 
 Misc
 - Restart after death: `R`
-
-## What's in the combat sandbox
-- Player with HP, Stamina, Mana resources and bar HUD
-- Three test weapons:
-  - Wooden Sword — melee, costs stamina
-  - Wooden Bow — ranged, mouse-aimed projectile, costs stamina
-  - Wooden Staff — magic, mouse-aimed projectile, costs mana
-- Mode indicator at top center (EXPLORATION / COMBAT) and a weapon panel
-  at top right
-- Four dummy enemies at varied positions/heights with HP bars; they take
-  damage, knock back, die, and respawn after a delay
-- Floating damage numbers, hit flashes, dash ghost trail
 
 ## Code layout
 
 ```
 src/
-  scenes/GameScene.ts        — playable test scene
-  data/weapons.ts            — weapon definitions + textures
-  systems/Projectiles.ts     — pooled arcade-physics projectiles
-
-  data/items.ts              — (parked) item registry for inventory
-  systems/Inventory.ts       — (parked) inventory model
-  ui/HotbarUI.ts             — (parked) bottom hotbar
-  ui/InventoryUI.ts          — (parked) inventory overlay
+  scenes/GameScene.ts          — playable sandbox
+  data/
+    weapons.ts                 — weapon definitions + textures
+    items.ts                   — item registry + icons (potions etc.)
+    skills.ts                  — skill registry + caster interface + icons
+  systems/
+    Projectiles.ts             — pooled arcade projectiles
+    Inventory.ts               — main/utility/skill slot storage
+  ui/HotbarUI.ts               — generic hotbar (slot data via callback)
+  entities/
+    Enemy.ts                   — base class: HP, aggro, FSM, knockback,
+                                 death + respawn, HP bar
+    Dummy.ts                   — stationary target
+    MeleeChaser.ts             — chases when player is in aggro radius
+    RangedEnemy.ts             — kites and fires at the player
 ```
 
-The parked modules are intentionally not wired into the current scene to
-keep the combat sandbox focused. They remain available to plug in later.
+## Test scene contents
+- Player with HP / MP / STA (rendered in that order, top-left)
+- Three weapons (sword melee, bow with gravity-after-delay arrows, staff
+  with piercing white tracer projectile)
+- Two dummies (idle targets), two melee chasers, two ranged enemies.
+  Knockback decays in ~220 ms thanks to drag + a hard stop in the
+  base `Enemy` class.
+- Player projectiles and enemy projectiles live in separate groups so
+  enemy shots only damage the player and vice versa.
+- Four example skills (Fireball / Heal / Stamina Surge / Blink) pre-bound
+  to skill slots 1–4 for combat-mode testing.

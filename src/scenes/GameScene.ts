@@ -1,6 +1,17 @@
 import Phaser from "phaser";
 import { WEAPONS, WeaponDef, buildWeaponTextures } from "../data/weapons";
-import { ProjectileSystem } from "../systems/Projectiles";
+import { ProjectileSpawnConfig, ProjectileSystem } from "../systems/Projectiles";
+import {
+  ITEMS,
+  buildItemIcons,
+} from "../data/items";
+import { Inventory } from "../systems/Inventory";
+import { SKILLS, SkillCaster, buildSkillIcons } from "../data/skills";
+import { HotbarUI, HotbarSlotDisplay } from "../ui/HotbarUI";
+import { Enemy } from "../entities/Enemy";
+import { Dummy } from "../entities/Dummy";
+import { MeleeChaser } from "../entities/MeleeChaser";
+import { RangedEnemy } from "../entities/RangedEnemy";
 
 const WORLD_WIDTH = 2880;
 const WORLD_HEIGHT = 540;
@@ -8,14 +19,11 @@ const GROUND_Y = 480;
 
 const PLAYER_SPEED = 220;
 const PLAYER_MAX_HP = 100;
-
 const JUMP_VELOCITY = 440;
 const JUMP_STAMINA_COST = 15;
-
 const DASH_SPEED = 620;
 const DASH_DURATION_MS = 160;
 const DASH_STAMINA_COST = 25;
-
 const STEP_UP_VELOCITY = 360;
 const DROP_THROUGH_MS = 280;
 
@@ -24,10 +32,9 @@ const STAMINA_REGEN_PER_SEC = 35;
 const MAX_MANA = 100;
 const MANA_REGEN_PER_SEC = 10;
 
-const DUMMY_MAX_HP = 80;
-const DUMMY_TOUCH_DAMAGE = 5;
-const DUMMY_TOUCH_COOLDOWN_MS = 1100;
-const DUMMY_RESPAWN_DELAY_MS = 3500;
+const TOUCH_COOLDOWN_MS = 800;
+const HP_POTION_HEAL = 30;
+const MP_POTION_RESTORE = 30;
 
 type PlayerSprite = Phaser.Physics.Arcade.Sprite & {
   hp: number;
@@ -36,32 +43,30 @@ type PlayerSprite = Phaser.Physics.Arcade.Sprite & {
   facing: 1 | -1;
   lastAttackAt: number;
   lastHurtAt: number;
+  invulnUntil: number;
   dashUntil: number;
   dashDir: 1 | -1;
   dropThroughUntil: number;
   weapon: WeaponDef;
 };
 
-type DummyEnemy = Phaser.Physics.Arcade.Sprite & {
-  hp: number;
-  maxHp: number;
-  spawnX: number;
-  spawnY: number;
-  hpBg: Phaser.GameObjects.Rectangle;
-  hpFill: Phaser.GameObjects.Rectangle;
-};
-
 type OneWayPlatform = Phaser.Physics.Arcade.Image;
 
 export class GameScene extends Phaser.Scene {
   private player!: PlayerSprite;
-  private dummies!: Phaser.Physics.Arcade.Group;
+  private enemies!: Phaser.Physics.Arcade.Group;
+  private enemyEntities: Enemy[] = [];
   private solidPlatforms!: Phaser.Physics.Arcade.StaticGroup;
   private oneWayPlatforms!: Phaser.Physics.Arcade.StaticGroup;
   private attackHitbox!: Phaser.GameObjects.Rectangle & {
     body: Phaser.Physics.Arcade.Body;
   };
-  private projectiles!: ProjectileSystem;
+  private playerProjectiles!: ProjectileSystem;
+  private enemyProjectiles!: ProjectileSystem;
+  private inventory!: Inventory;
+  private hotbarUI!: HotbarUI;
+  private caster!: SkillCaster;
+  private skillCooldownUntil = new Map<string, number>();
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private keyA!: Phaser.Input.Keyboard.Key;
@@ -72,11 +77,12 @@ export class GameScene extends Phaser.Scene {
   private keyE!: Phaser.Input.Keyboard.Key;
   private keySpace!: Phaser.Input.Keyboard.Key;
   private weaponKeys: Phaser.Input.Keyboard.Key[] = [];
+  private hotbarKeys: Phaser.Input.Keyboard.Key[] = [];
 
   private hudBars!: Phaser.GameObjects.Graphics;
   private hpText!: Phaser.GameObjects.Text;
-  private staText!: Phaser.GameObjects.Text;
   private mpText!: Phaser.GameObjects.Text;
+  private staText!: Phaser.GameObjects.Text;
   private modeText!: Phaser.GameObjects.Text;
   private weaponPanel!: Phaser.GameObjects.Text;
   private weaponIcon!: Phaser.GameObjects.Image;
@@ -91,9 +97,14 @@ export class GameScene extends Phaser.Scene {
   preload(): void {
     this.makePixelTexture("px-player", 18, 28, 0x6fd3ff, 0x254a5a);
     this.makePixelTexture("px-dummy", 22, 30, 0xb89070, 0x5a4530);
+    this.makePixelTexture("px-chaser", 20, 28, 0xe05050, 0x5a2020);
+    this.makePixelTexture("px-ranged", 18, 28, 0x9070ff, 0x3a2580);
     this.makePixelTexture("px-ground", 64, 16, 0x3a3f55, 0x1c1f2b);
     this.makePixelTexture("px-platform", 96, 12, 0x4a5072, 0x252a3d);
     buildWeaponTextures(this);
+    buildItemIcons(this);
+    buildSkillIcons(this);
+    this.makeOrb("proj-enemy-shot", 0xff6f7a);
   }
 
   create(): void {
@@ -106,11 +117,9 @@ export class GameScene extends Phaser.Scene {
     this.buildLevel();
 
     this.player = this.spawnPlayer(80, GROUND_Y - 60);
-    this.dummies = this.physics.add.group();
-    this.spawnDummy(400, GROUND_Y - 60);
-    this.spawnDummy(820, 280);
-    this.spawnDummy(1500, GROUND_Y - 60);
-    this.spawnDummy(2200, GROUND_Y - 60);
+
+    this.enemies = this.physics.add.group();
+    this.spawnEnemies();
 
     this.attackHitbox = this.add.rectangle(0, 0, 36, 24, 0xffe680, 0) as
       Phaser.GameObjects.Rectangle & { body: Phaser.Physics.Arcade.Body };
@@ -118,80 +127,26 @@ export class GameScene extends Phaser.Scene {
     this.attackHitbox.body.setAllowGravity(false);
     this.attackHitbox.body.enable = false;
 
-    this.projectiles = new ProjectileSystem(this);
+    this.playerProjectiles = new ProjectileSystem(this);
+    this.enemyProjectiles = new ProjectileSystem(this);
 
-    this.physics.add.collider(this.player, this.solidPlatforms);
-    this.physics.add.collider(this.dummies, this.solidPlatforms);
-    this.physics.add.collider(
-      this.player,
-      this.oneWayPlatforms,
-      undefined,
-      (_p, plat) => this.shouldCollideOneWay(plat as OneWayPlatform),
-      this,
-    );
-    this.physics.add.collider(this.dummies, this.oneWayPlatforms);
-    this.physics.add.overlap(
-      this.player,
-      this.dummies,
-      (_p, d) => this.onPlayerTouchDummy(d as DummyEnemy),
-      undefined,
-      this,
-    );
-    this.physics.add.overlap(
-      this.attackHitbox,
-      this.dummies,
-      (_hb, d) => this.onMeleeHit(d as DummyEnemy),
-      undefined,
-      this,
-    );
-    this.physics.add.overlap(
-      this.projectiles.getGroup(),
-      this.dummies,
-      (proj, d) =>
-        this.onProjectileHit(
-          proj as Phaser.Physics.Arcade.Image,
-          d as DummyEnemy,
-        ),
-      undefined,
-      this,
-    );
-    this.physics.add.overlap(
-      this.projectiles.getGroup(),
-      this.solidPlatforms,
-      (proj) => {
-        const p = proj as Phaser.Physics.Arcade.Image;
-        if (p.getData("piercing")) return;
-        this.projectiles.markForDestroy(p);
-      },
-      undefined,
-      this,
-    );
-
-    const kb = this.input.keyboard!;
-    this.cursors = kb.createCursorKeys();
-    this.keyA = kb.addKey(Phaser.Input.Keyboard.KeyCodes.A);
-    this.keyD = kb.addKey(Phaser.Input.Keyboard.KeyCodes.D);
-    this.keyW = kb.addKey(Phaser.Input.Keyboard.KeyCodes.W);
-    this.keyS = kb.addKey(Phaser.Input.Keyboard.KeyCodes.S);
-    this.keyQ = kb.addKey(Phaser.Input.Keyboard.KeyCodes.Q);
-    this.keyE = kb.addKey(Phaser.Input.Keyboard.KeyCodes.E);
-    this.keySpace = kb.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-    this.weaponKeys = [
-      kb.addKey(Phaser.Input.Keyboard.KeyCodes.ONE),
-      kb.addKey(Phaser.Input.Keyboard.KeyCodes.TWO),
-      kb.addKey(Phaser.Input.Keyboard.KeyCodes.THREE),
-    ];
-
-    this.input.mouse?.disableContextMenu();
-    this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-      if (pointer.button === 2) this.toggleCombatMode();
-      else if (pointer.button === 0) this.onLeftClick();
-    });
+    this.setupCollisions();
+    this.setupInput();
 
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
     this.cameras.main.setDeadzone(120, 80);
 
+    this.inventory = new Inventory();
+    this.seedInventory();
+    this.caster = this.buildSkillCaster();
+
     this.buildHud();
+    this.hotbarUI = new HotbarUI(
+      this,
+      (i) => this.describeHotbarSlot(i),
+      () => this.describeHotbarMode(),
+    );
+
     this.setWeapon("wooden_sword");
   }
 
@@ -201,7 +156,6 @@ export class GameScene extends Phaser.Scene {
     const dt = delta / 1000;
     const body = this.player.body as Phaser.Physics.Arcade.Body;
 
-    // Inputs first so dash/jump state is fresh for the rest of update().
     if (Phaser.Input.Keyboard.JustDown(this.keySpace)) this.tryJump();
     if (Phaser.Input.Keyboard.JustDown(this.keyQ)) this.tryDash(-1);
     if (Phaser.Input.Keyboard.JustDown(this.keyE)) this.tryDash(1);
@@ -213,6 +167,11 @@ export class GameScene extends Phaser.Scene {
       this.setWeapon("wooden_bow");
     if (Phaser.Input.Keyboard.JustDown(this.weaponKeys[2]))
       this.setWeapon("wooden_staff");
+    for (let i = 0; i < this.hotbarKeys.length; i++) {
+      if (Phaser.Input.Keyboard.JustDown(this.hotbarKeys[i])) {
+        this.useHotbarSlot(i);
+      }
+    }
 
     const dashing = now < this.player.dashUntil;
     const left = this.cursors.left?.isDown || this.keyA.isDown;
@@ -241,17 +200,17 @@ export class GameScene extends Phaser.Scene {
       (this.attackHitbox.body as Phaser.Physics.Arcade.Body).updateFromGameObject();
     }
 
-    this.dummies.children.iterate((obj) => {
-      const d = obj as DummyEnemy;
-      if (!d.active) return true;
-      d.hpBg.setPosition(d.x, d.y - 22);
-      d.hpFill.setPosition(d.x - 16, d.y - 22);
-      d.hpFill.width = 32 * (d.hp / d.maxHp);
-      return true;
-    });
+    const playerView = {
+      x: this.player.x,
+      y: this.player.y,
+      facing: this.player.facing,
+      alive: this.player.active,
+    };
+    for (const e of this.enemyEntities) e.update(now, dt, playerView);
 
     this.updateWeaponVisual(now);
-    this.projectiles.update(dt);
+    this.playerProjectiles.update(dt);
+    this.enemyProjectiles.update(dt);
 
     if (this.player.y > WORLD_HEIGHT + 100) this.damagePlayer(PLAYER_MAX_HP);
 
@@ -265,9 +224,135 @@ export class GameScene extends Phaser.Scene {
     );
 
     this.drawHud();
+    this.hotbarUI.refresh();
   }
 
-  // ---------------- Movement ----------------
+  // -------- Setup --------
+
+  private setupCollisions(): void {
+    this.physics.add.collider(this.player, this.solidPlatforms);
+    this.physics.add.collider(this.enemies, this.solidPlatforms);
+    this.physics.add.collider(
+      this.player,
+      this.oneWayPlatforms,
+      undefined,
+      (_p, plat) => this.shouldCollideOneWay(plat as OneWayPlatform),
+      this,
+    );
+    this.physics.add.collider(this.enemies, this.oneWayPlatforms);
+
+    this.physics.add.overlap(
+      this.player,
+      this.enemies,
+      (_p, e) => this.onPlayerTouchEnemy(e as Phaser.Physics.Arcade.Sprite),
+      undefined,
+      this,
+    );
+    this.physics.add.overlap(
+      this.attackHitbox,
+      this.enemies,
+      (_hb, e) => this.onMeleeHit(e as Phaser.Physics.Arcade.Sprite),
+      undefined,
+      this,
+    );
+    this.physics.add.overlap(
+      this.playerProjectiles.getGroup(),
+      this.enemies,
+      (proj, e) =>
+        this.onPlayerProjectileHit(
+          proj as Phaser.Physics.Arcade.Image,
+          e as Phaser.Physics.Arcade.Sprite,
+        ),
+      undefined,
+      this,
+    );
+    this.physics.add.overlap(
+      this.playerProjectiles.getGroup(),
+      this.solidPlatforms,
+      (proj) => {
+        const p = proj as Phaser.Physics.Arcade.Image;
+        if (p.getData("piercing")) return;
+        this.playerProjectiles.markForDestroy(p);
+      },
+      undefined,
+      this,
+    );
+    this.physics.add.overlap(
+      this.enemyProjectiles.getGroup(),
+      this.player,
+      (proj) =>
+        this.onEnemyProjectileHit(proj as Phaser.Physics.Arcade.Image),
+      undefined,
+      this,
+    );
+    this.physics.add.overlap(
+      this.enemyProjectiles.getGroup(),
+      this.solidPlatforms,
+      (proj) =>
+        this.enemyProjectiles.markForDestroy(
+          proj as Phaser.Physics.Arcade.Image,
+        ),
+      undefined,
+      this,
+    );
+  }
+
+  private setupInput(): void {
+    const kb = this.input.keyboard!;
+    this.cursors = kb.createCursorKeys();
+    this.keyA = kb.addKey(Phaser.Input.Keyboard.KeyCodes.A);
+    this.keyD = kb.addKey(Phaser.Input.Keyboard.KeyCodes.D);
+    this.keyW = kb.addKey(Phaser.Input.Keyboard.KeyCodes.W);
+    this.keyS = kb.addKey(Phaser.Input.Keyboard.KeyCodes.S);
+    this.keyQ = kb.addKey(Phaser.Input.Keyboard.KeyCodes.Q);
+    this.keyE = kb.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+    this.keySpace = kb.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    this.weaponKeys = [
+      kb.addKey(Phaser.Input.Keyboard.KeyCodes.Z),
+      kb.addKey(Phaser.Input.Keyboard.KeyCodes.X),
+      kb.addKey(Phaser.Input.Keyboard.KeyCodes.C),
+    ];
+    const digitCodes = [
+      Phaser.Input.Keyboard.KeyCodes.ONE,
+      Phaser.Input.Keyboard.KeyCodes.TWO,
+      Phaser.Input.Keyboard.KeyCodes.THREE,
+      Phaser.Input.Keyboard.KeyCodes.FOUR,
+      Phaser.Input.Keyboard.KeyCodes.FIVE,
+      Phaser.Input.Keyboard.KeyCodes.SIX,
+      Phaser.Input.Keyboard.KeyCodes.SEVEN,
+      Phaser.Input.Keyboard.KeyCodes.EIGHT,
+      Phaser.Input.Keyboard.KeyCodes.NINE,
+      Phaser.Input.Keyboard.KeyCodes.ZERO,
+    ];
+    this.hotbarKeys = digitCodes.map((c) => kb.addKey(c));
+
+    this.input.mouse?.disableContextMenu();
+    this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      if (pointer.button === 2) this.toggleCombatMode();
+      else if (pointer.button === 0) this.onLeftClick();
+    });
+  }
+
+  // -------- Enemy setup --------
+
+  private spawnEnemies(): void {
+    const dummies = [new Dummy(this, 400, GROUND_Y - 60), new Dummy(this, 1500, GROUND_Y - 60)];
+    const chasers = [
+      new MeleeChaser(this, 820, GROUND_Y - 60),
+      new MeleeChaser(this, 1900, GROUND_Y - 60),
+    ];
+    const ranged = [
+      new RangedEnemy(this, 1200, 250),
+      new RangedEnemy(this, 2300, GROUND_Y - 60),
+    ];
+    for (const r of ranged) {
+      r.fireProjectile = (cfg) => this.enemyProjectiles.spawn(cfg);
+    }
+    this.enemyEntities.push(...dummies, ...chasers, ...ranged);
+    for (const e of this.enemyEntities) this.enemies.add(e.sprite);
+  }
+
+  // -------- Player movement --------
 
   private tryJump(): void {
     if (this.player.stamina < JUMP_STAMINA_COST) return;
@@ -281,8 +366,7 @@ export class GameScene extends Phaser.Scene {
   private tryDash(dir: 1 | -1): void {
     if (this.player.stamina < DASH_STAMINA_COST) return;
     this.player.stamina -= DASH_STAMINA_COST;
-    const now = this.time.now;
-    this.player.dashUntil = now + DASH_DURATION_MS;
+    this.player.dashUntil = this.time.now + DASH_DURATION_MS;
     this.player.dashDir = dir;
     this.player.facing = dir;
     this.player.setFlipX(dir === -1);
@@ -300,11 +384,7 @@ export class GameScene extends Phaser.Scene {
       const p = obj as OneWayPlatform;
       const top = p.y - p.displayHeight / 2;
       const dy = py - top;
-      if (
-        dy > 8 &&
-        dy < 140 &&
-        Math.abs(p.x - px) < p.displayWidth / 2 + 40
-      ) {
+      if (dy > 8 && dy < 140 && Math.abs(p.x - px) < p.displayWidth / 2 + 40) {
         if (dy < bestDy) {
           bestDy = dy;
           target = p;
@@ -330,7 +410,7 @@ export class GameScene extends Phaser.Scene {
     return playerBottom <= platTop + 4 && body.velocity.y >= 0;
   }
 
-  // ---------------- Combat mode ----------------
+  // -------- Combat mode + clicks --------
 
   private toggleCombatMode(): void {
     this.combatMode = !this.combatMode;
@@ -343,10 +423,9 @@ export class GameScene extends Phaser.Scene {
 
   private onLeftClick(): void {
     if (this.combatMode) this.fireWeapon();
-    // else: exploration left-click is reserved for environment interaction
   }
 
-  // ---------------- Weapons ----------------
+  // -------- Weapons --------
 
   private setWeapon(id: string): void {
     const w = WEAPONS[id];
@@ -358,13 +437,14 @@ export class GameScene extends Phaser.Scene {
 
   private refreshWeaponPanel(): void {
     const lines: string[] = [];
-    for (const id of ["wooden_sword", "wooden_bow", "wooden_staff"]) {
-      const w = WEAPONS[id];
-      const num = id === "wooden_sword" ? "1" : id === "wooden_bow" ? "2" : "3";
-      const sel = this.player.weapon.id === id ? ">" : " ";
+    const ids = ["wooden_sword", "wooden_bow", "wooden_staff"];
+    const keys = ["Z", "X", "C"];
+    for (let i = 0; i < ids.length; i++) {
+      const w = WEAPONS[ids[i]];
+      const sel = this.player.weapon.id === w.id ? ">" : " ";
       const sta = w.staminaCost ? ` ${w.staminaCost}sta` : "";
       const mp = w.manaCost ? ` ${w.manaCost}mp` : "";
-      lines.push(`${sel} ${num}: ${w.name} (${w.damage} dmg${sta}${mp})`);
+      lines.push(`${sel} ${keys[i]}: ${w.name} (${w.damage} dmg${sta}${mp})`);
     }
     this.weaponPanel.setText(lines.join("\n"));
   }
@@ -416,7 +496,7 @@ export class GameScene extends Phaser.Scene {
       dx /= len;
       dy /= len;
     }
-    this.projectiles.spawn({
+    this.playerProjectiles.spawn({
       x: ox,
       y: oy,
       vx: dx * w.projectileSpeed,
@@ -446,11 +526,8 @@ export class GameScene extends Phaser.Scene {
     const w = this.player.weapon;
     this.weaponVisual.setTexture(w.heldTexture);
     const swinging =
-      w.type === "melee" &&
-      now - this.player.lastAttackAt < w.swingDurationMs;
-    const tilt = swinging
-      ? this.player.facing * 1.0
-      : this.player.facing * 0.25;
+      w.type === "melee" && now - this.player.lastAttackAt < w.swingDurationMs;
+    const tilt = swinging ? this.player.facing * 1.0 : this.player.facing * 0.25;
     this.weaponVisual
       .setPosition(this.player.x + this.player.facing * 9, this.player.y + 4)
       .setRotation(tilt)
@@ -458,27 +535,118 @@ export class GameScene extends Phaser.Scene {
       .setVisible(true);
   }
 
-  // ---------------- Damage ----------------
+  // -------- Hotbar --------
 
-  private onMeleeHit(dummy: DummyEnemy): void {
-    if (!dummy.active) return;
+  private useHotbarSlot(slot: number): void {
+    if (this.combatMode) this.castSkillInSlot(slot);
+    else this.useItemInSlot(slot);
+  }
+
+  private useItemInSlot(slot: number): void {
+    const stack = this.inventory.utility[slot];
+    if (!stack) return;
+    let consumed = false;
+    switch (stack.itemId) {
+      case "hp_potion":
+        if (this.player.hp < PLAYER_MAX_HP) {
+          this.player.hp = Math.min(PLAYER_MAX_HP, this.player.hp + HP_POTION_HEAL);
+          this.flashPlayer(0x60d060, 180);
+          consumed = true;
+        }
+        break;
+      case "mp_potion":
+        if (this.player.mana < MAX_MANA) {
+          this.player.mana = Math.min(MAX_MANA, this.player.mana + MP_POTION_RESTORE);
+          this.flashPlayer(0x6fb6ff, 180);
+          consumed = true;
+        }
+        break;
+    }
+    if (consumed) {
+      this.inventory.consumeUtility(slot);
+      this.hotbarUI.flash(slot);
+    }
+  }
+
+  private castSkillInSlot(slot: number): void {
+    const ref = this.inventory.skill[slot];
+    if (!ref) return;
+    const skill = SKILLS[ref.skillId];
+    if (!skill) return;
+    const now = this.time.now;
+    const cdUntil = this.skillCooldownUntil.get(skill.id) ?? 0;
+    if (now < cdUntil) return;
+    if (this.player.mana < skill.manaCost) return;
+    this.player.mana -= skill.manaCost;
+    this.skillCooldownUntil.set(skill.id, now + skill.cooldownMs);
+    skill.cast(this.caster);
+    this.hotbarUI.flash(slot);
+  }
+
+  private describeHotbarSlot(i: number): HotbarSlotDisplay {
+    if (this.combatMode) {
+      const ref = this.inventory.skill[i];
+      if (!ref) {
+        return { iconKey: null, count: null, cooldownPct: 1, cooldownSecondsLeft: 0, available: false };
+      }
+      const skill = SKILLS[ref.skillId];
+      const cdUntil = this.skillCooldownUntil.get(skill.id) ?? 0;
+      const remaining = Math.max(0, cdUntil - this.time.now);
+      const pct = skill.cooldownMs > 0 ? 1 - remaining / skill.cooldownMs : 1;
+      const ready = remaining <= 0 && this.player.mana >= skill.manaCost;
+      return {
+        iconKey: skill.iconKey,
+        count: null,
+        cooldownPct: Phaser.Math.Clamp(pct, 0, 1),
+        cooldownSecondsLeft: remaining / 1000,
+        available: ready,
+      };
+    }
+    const stack = this.inventory.utility[i];
+    if (!stack) {
+      return { iconKey: null, count: null, cooldownPct: 1, cooldownSecondsLeft: 0, available: false };
+    }
+    const def = ITEMS[stack.itemId];
+    return {
+      iconKey: def.icon,
+      count: stack.count,
+      cooldownPct: 1,
+      cooldownSecondsLeft: 0,
+      available: stack.count > 0,
+    };
+  }
+
+  private describeHotbarMode(): { text: string; color: string } {
+    return this.combatMode
+      ? { text: "Skill bar (battle mode)", color: "#ff8a5a" }
+      : { text: "Utility bar (exploration)", color: "#6fd3ff" };
+  }
+
+  // -------- Damage handlers --------
+
+  private onMeleeHit(enemySprite: Phaser.Physics.Arcade.Sprite): void {
+    const enemy = enemySprite.getData("enemy") as Enemy | undefined;
+    if (!enemy || !enemy.alive) return;
     const dmg = (this.attackHitbox.getData("damage") as number) ?? 0;
     const knockX = (this.attackHitbox.getData("knockX") as number) ?? 0;
     const knockY = (this.attackHitbox.getData("knockY") as number) ?? -120;
-    this.damageDummy(dummy, dmg);
-    (dummy.body as Phaser.Physics.Arcade.Body).setVelocity(knockX, knockY);
+    enemy.takeDamage(dmg, knockX, knockY);
+    this.spawnDamageNumber(enemy.sprite.x, enemy.sprite.y - 30, dmg, "#ffd060");
+    if (!enemy.alive) this.spawnHitFlash(enemy.sprite.x, enemy.sprite.y);
   }
 
-  private onProjectileHit(
+  private onPlayerProjectileHit(
     proj: Phaser.Physics.Arcade.Image,
-    dummy: DummyEnemy,
+    enemySprite: Phaser.Physics.Arcade.Sprite,
   ): void {
-    if (!dummy.active || !proj.active) return;
+    if (!proj.active) return;
+    const enemy = enemySprite.getData("enemy") as Enemy | undefined;
+    if (!enemy || !enemy.alive) return;
     const piercing = proj.getData("piercing") as boolean;
     if (piercing) {
-      const hitSet = proj.getData("hitSet") as Set<DummyEnemy>;
-      if (hitSet.has(dummy)) return;
-      hitSet.add(dummy);
+      const hitSet = proj.getData("hitSet") as Set<Enemy>;
+      if (hitSet.has(enemy)) return;
+      hitSet.add(enemy);
     } else {
       if (proj.getData("hit")) return;
       proj.setData("hit", true);
@@ -487,35 +655,33 @@ export class GameScene extends Phaser.Scene {
     const knockX = (proj.getData("knockX") as number) ?? 0;
     const knockY = (proj.getData("knockY") as number) ?? -60;
     const vx = (proj.body as Phaser.Physics.Arcade.Body).velocity.x;
-    this.damageDummy(dummy, dmg);
-    (dummy.body as Phaser.Physics.Arcade.Body).setVelocity(
-      Math.sign(vx) * knockX,
-      knockY,
-    );
-    if (!piercing) this.projectiles.markForDestroy(proj);
+    enemy.takeDamage(dmg, Math.sign(vx) * knockX, knockY);
+    this.spawnDamageNumber(enemy.sprite.x, enemy.sprite.y - 30, dmg, "#ffd060");
+    if (!enemy.alive) this.spawnHitFlash(enemy.sprite.x, enemy.sprite.y);
+    if (!piercing) this.playerProjectiles.markForDestroy(proj);
   }
 
-  private damageDummy(dummy: DummyEnemy, amount: number): void {
-    dummy.hp = Math.max(0, dummy.hp - amount);
-    this.spawnDamageNumber(dummy.x, dummy.y - 30, amount, "#ffd060");
-    dummy.setTint(0xffffff);
-    this.time.delayedCall(70, () => dummy.clearTint());
-    if (dummy.hp <= 0) this.killDummy(dummy);
+  private onEnemyProjectileHit(proj: Phaser.Physics.Arcade.Image): void {
+    if (!proj.active) return;
+    if (proj.getData("hit")) return;
+    proj.setData("hit", true);
+    const dmg = (proj.getData("damage") as number) ?? 0;
+    this.damagePlayer(dmg);
+    this.enemyProjectiles.markForDestroy(proj);
   }
 
-  private onPlayerTouchDummy(dummy: DummyEnemy): void {
-    if (!dummy.active) return;
+  private onPlayerTouchEnemy(enemySprite: Phaser.Physics.Arcade.Sprite): void {
+    const enemy = enemySprite.getData("enemy") as Enemy | undefined;
+    if (!enemy || !enemy.alive) return;
     const now = this.time.now;
-    if (now - this.player.lastHurtAt < DUMMY_TOUCH_COOLDOWN_MS) return;
-    this.damagePlayer(DUMMY_TOUCH_DAMAGE);
-    const dir = this.player.x < dummy.x ? -1 : 1;
-    (this.player.body as Phaser.Physics.Arcade.Body).setVelocity(
-      dir * 220,
-      -220,
-    );
+    if (now - this.player.lastHurtAt < TOUCH_COOLDOWN_MS) return;
+    this.damagePlayer(enemy.contactDamage);
+    const dir = this.player.x < enemy.sprite.x ? -1 : 1;
+    (this.player.body as Phaser.Physics.Arcade.Body).setVelocity(dir * 220, -220);
   }
 
   private damagePlayer(amount: number): void {
+    if (this.time.now < this.player.invulnUntil) return;
     this.player.hp = Math.max(0, this.player.hp - amount);
     this.player.lastHurtAt = this.time.now;
     this.player.setTint(0xff6f7a);
@@ -543,7 +709,55 @@ export class GameScene extends Phaser.Scene {
     this.input.keyboard!.once("keydown-R", () => this.scene.restart());
   }
 
-  // ---------------- Spawns ----------------
+  // -------- Skill caster --------
+
+  private buildSkillCaster(): SkillCaster {
+    return {
+      player: () => ({ x: this.player.x, y: this.player.y, facing: this.player.facing }),
+      cursor: () => ({
+        x: this.input.activePointer.worldX,
+        y: this.input.activePointer.worldY,
+      }),
+      healPlayer: (amount) => {
+        this.player.hp = Math.min(PLAYER_MAX_HP, this.player.hp + amount);
+      },
+      restoreMana: (amount) => {
+        this.player.mana = Math.min(MAX_MANA, this.player.mana + amount);
+      },
+      restoreStamina: (amount) => {
+        this.player.stamina = Math.min(MAX_STAMINA, this.player.stamina + amount);
+      },
+      blinkPlayer: (distance) => {
+        const dx = this.player.facing * distance;
+        const target = Phaser.Math.Clamp(this.player.x + dx, 16, WORLD_WIDTH - 16);
+        this.player.setX(target);
+        this.spawnDashTrail();
+      },
+      applyInvulnFor: (ms) => {
+        this.player.invulnUntil = Math.max(this.player.invulnUntil, this.time.now + ms);
+      },
+      spawnPlayerProjectile: (cfg) => this.playerProjectiles.spawn(cfg),
+      flashPlayer: (color, ms) => this.flashPlayer(color, ms),
+    };
+  }
+
+  private flashPlayer(color: number, ms: number): void {
+    this.player.setTint(color);
+    this.time.delayedCall(ms, () => this.player.clearTint());
+  }
+
+  // -------- Inventory seeding --------
+
+  private seedInventory(): void {
+    this.inventory.addItem("utility", "hp_potion", 5, ITEMS.hp_potion.maxStack);
+    this.inventory.addItem("utility", "mp_potion", 5, ITEMS.mp_potion.maxStack);
+    this.inventory.setSkill(0, { skillId: "fireball" });
+    this.inventory.setSkill(1, { skillId: "heal" });
+    this.inventory.setSkill(2, { skillId: "surge" });
+    this.inventory.setSkill(3, { skillId: "blink" });
+  }
+
+  // -------- Spawns / world --------
 
   private spawnPlayer(x: number, y: number): PlayerSprite {
     const s = this.physics.add.sprite(x, y, "px-player") as PlayerSprite;
@@ -555,6 +769,7 @@ export class GameScene extends Phaser.Scene {
     s.facing = 1;
     s.lastAttackAt = -Infinity;
     s.lastHurtAt = -Infinity;
+    s.invulnUntil = 0;
     s.dashUntil = 0;
     s.dashDir = 1;
     s.dropThroughUntil = 0;
@@ -562,48 +777,6 @@ export class GameScene extends Phaser.Scene {
     (s.body as Phaser.Physics.Arcade.Body).setSize(14, 26).setOffset(2, 1);
     return s;
   }
-
-  private spawnDummy(x: number, y: number): DummyEnemy {
-    const d = this.physics.add.sprite(x, y, "px-dummy") as DummyEnemy;
-    d.setCollideWorldBounds(true);
-    d.setImmovable(false);
-    d.hp = DUMMY_MAX_HP;
-    d.maxHp = DUMMY_MAX_HP;
-    d.spawnX = x;
-    d.spawnY = y;
-    const dBody = d.body as Phaser.Physics.Arcade.Body;
-    dBody.setSize(18, 26).setOffset(2, 2);
-    dBody.setDragX(900);
-    dBody.setMaxVelocity(420, 900);
-    d.hpBg = this.add
-      .rectangle(x, y - 22, 34, 4, 0x000000, 0.7)
-      .setDepth(900);
-    d.hpFill = this.add
-      .rectangle(x - 16, y - 22, 32, 2, 0xe06070, 1)
-      .setOrigin(0, 0.5)
-      .setDepth(901);
-    this.dummies.add(d);
-    return d;
-  }
-
-  private killDummy(d: DummyEnemy): void {
-    d.setActive(false).setVisible(false);
-    d.hpBg.setVisible(false);
-    d.hpFill.setVisible(false);
-    (d.body as Phaser.Physics.Arcade.Body).enable = false;
-    this.spawnHitFlash(d.x, d.y);
-    this.time.delayedCall(DUMMY_RESPAWN_DELAY_MS, () => {
-      d.setPosition(d.spawnX, d.spawnY);
-      d.hp = d.maxHp;
-      d.setActive(true).setVisible(true);
-      d.hpBg.setVisible(true);
-      d.hpFill.setVisible(true);
-      (d.body as Phaser.Physics.Arcade.Body).enable = true;
-      (d.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
-    });
-  }
-
-  // ---------------- World ----------------
 
   private buildLevel(): void {
     for (let x = 0; x < WORLD_WIDTH; x += 64) {
@@ -618,10 +791,10 @@ export class GameScene extends Phaser.Scene {
       [320, 380],
       [560, 320],
       [820, 320],
-      [1180, 340],
-      [1420, 290],
-      [1720, 360],
-      [2020, 320],
+      [1180, 300],
+      [1420, 340],
+      [1720, 320],
+      [2020, 300],
       [2260, 240],
       [2520, 350],
     ];
@@ -653,32 +826,20 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  // ---------------- HUD ----------------
+  // -------- HUD --------
 
   private buildHud(): void {
     this.hudBars = this.add.graphics().setScrollFactor(0).setDepth(1000);
     this.hpText = this.add
-      .text(12, 12, "", {
-        fontFamily: "monospace",
-        fontSize: "11px",
-        color: "#ffffff",
-      })
-      .setScrollFactor(0)
-      .setDepth(1001);
-    this.staText = this.add
-      .text(12, 30, "", {
-        fontFamily: "monospace",
-        fontSize: "11px",
-        color: "#ffffff",
-      })
+      .text(12, 12, "", { fontFamily: "monospace", fontSize: "11px", color: "#ffffff" })
       .setScrollFactor(0)
       .setDepth(1001);
     this.mpText = this.add
-      .text(12, 48, "", {
-        fontFamily: "monospace",
-        fontSize: "11px",
-        color: "#ffffff",
-      })
+      .text(12, 30, "", { fontFamily: "monospace", fontSize: "11px", color: "#ffffff" })
+      .setScrollFactor(0)
+      .setDepth(1001);
+    this.staText = this.add
+      .text(12, 48, "", { fontFamily: "monospace", fontSize: "11px", color: "#ffffff" })
       .setScrollFactor(0)
       .setDepth(1001);
 
@@ -721,23 +882,11 @@ export class GameScene extends Phaser.Scene {
     const g = this.hudBars;
     g.clear();
     this.drawBar(g, 80, 14, 130, 9, this.player.hp / PLAYER_MAX_HP, 0xe04050);
-    this.drawBar(
-      g,
-      80,
-      32,
-      130,
-      9,
-      this.player.stamina / MAX_STAMINA,
-      0xf4d35e,
-    );
-    this.drawBar(g, 80, 50, 130, 9, this.player.mana / MAX_MANA, 0x6fb6ff);
+    this.drawBar(g, 80, 32, 130, 9, this.player.mana / MAX_MANA, 0x6fb6ff);
+    this.drawBar(g, 80, 50, 130, 9, this.player.stamina / MAX_STAMINA, 0xf4d35e);
     this.hpText.setText(`HP  ${Math.ceil(this.player.hp).toString().padStart(3)}`);
-    this.staText.setText(
-      `STA ${Math.ceil(this.player.stamina).toString().padStart(3)}`,
-    );
-    this.mpText.setText(
-      `MP  ${Math.ceil(this.player.mana).toString().padStart(3)}`,
-    );
+    this.mpText.setText(`MP  ${Math.ceil(this.player.mana).toString().padStart(3)}`);
+    this.staText.setText(`STA ${Math.ceil(this.player.stamina).toString().padStart(3)}`);
   }
 
   private drawBar(
@@ -757,7 +906,7 @@ export class GameScene extends Phaser.Scene {
     g.fillRect(x, y, Math.floor(w * Math.max(0, Math.min(1, pct))), h);
   }
 
-  // ---------------- VFX ----------------
+  // -------- VFX / helpers --------
 
   private spawnHitFlash(x: number, y: number): void {
     const flash = this.add.circle(x, y, 14, 0xffe680, 0.9);
@@ -820,6 +969,16 @@ export class GameScene extends Phaser.Scene {
     g.fillStyle(fill, 1);
     g.fillRect(1, 1, w - 2, h - 2);
     g.generateTexture(key, w, h);
+    g.destroy();
+  }
+
+  private makeOrb(key: string, color: number): void {
+    const g = this.make.graphics({ x: 0, y: 0 }, false);
+    g.fillStyle(color, 1);
+    g.fillCircle(7, 7, 6);
+    g.fillStyle(0xffffff, 0.6);
+    g.fillCircle(6, 6, 2);
+    g.generateTexture(key, 14, 14);
     g.destroy();
   }
 }

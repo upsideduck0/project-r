@@ -3,6 +3,10 @@ export interface ItemStack {
   count: number;
 }
 
+export interface SkillRef {
+  skillId: string;
+}
+
 export type SlotSection = "main" | "utility" | "skill";
 
 export interface SlotRef {
@@ -18,7 +22,7 @@ export const HOTBAR_SIZE = COLS;
 export class Inventory {
   readonly main: (ItemStack | null)[];
   readonly utility: (ItemStack | null)[];
-  readonly skill: (ItemStack | null)[];
+  readonly skill: (SkillRef | null)[];
 
   constructor() {
     this.main = new Array(MAIN_SIZE).fill(null);
@@ -26,56 +30,59 @@ export class Inventory {
     this.skill = new Array(HOTBAR_SIZE).fill(null);
   }
 
-  get(ref: SlotRef): ItemStack | null {
-    return this.section(ref.section)[ref.index];
+  getItem(section: "main" | "utility", index: number): ItemStack | null {
+    return (section === "main" ? this.main : this.utility)[index];
   }
 
-  set(ref: SlotRef, stack: ItemStack | null): void {
-    this.section(ref.section)[ref.index] = stack;
+  setItem(
+    section: "main" | "utility",
+    index: number,
+    stack: ItemStack | null,
+  ): void {
+    (section === "main" ? this.main : this.utility)[index] = stack;
   }
 
-  swap(a: SlotRef, b: SlotRef): void {
-    if (a.section === b.section && a.index === b.index) return;
-    const sa = this.section(a.section);
-    const sb = this.section(b.section);
-    const tmp = sa[a.index];
-    sa[a.index] = sb[b.index];
-    sb[b.index] = tmp;
+  getSkill(index: number): SkillRef | null {
+    return this.skill[index];
   }
 
-  addItem(itemId: string, count: number, maxStack: number): number {
+  setSkill(index: number, ref: SkillRef | null): void {
+    this.skill[index] = ref;
+  }
+
+  addItem(
+    section: "main" | "utility",
+    itemId: string,
+    count: number,
+    maxStack: number,
+  ): number {
+    const arr = section === "main" ? this.main : this.utility;
     let remaining = count;
-    const sections: SlotSection[] = ["main", "utility", "skill"];
-    for (const section of sections) {
-      const arr = this.section(section);
-      for (let i = 0; i < arr.length; i++) {
-        if (remaining <= 0) return 0;
-        const s = arr[i];
-        if (s && s.itemId === itemId && s.count < maxStack) {
-          const space = maxStack - s.count;
-          const give = Math.min(space, remaining);
-          s.count += give;
-          remaining -= give;
-        }
+    for (let i = 0; i < arr.length; i++) {
+      if (remaining <= 0) return 0;
+      const s = arr[i];
+      if (s && s.itemId === itemId && s.count < maxStack) {
+        const give = Math.min(maxStack - s.count, remaining);
+        s.count += give;
+        remaining -= give;
       }
     }
-    for (const section of sections) {
-      const arr = this.section(section);
-      for (let i = 0; i < arr.length; i++) {
-        if (remaining <= 0) return 0;
-        if (!arr[i]) {
-          const give = Math.min(maxStack, remaining);
-          arr[i] = { itemId, count: give };
-          remaining -= give;
-        }
+    for (let i = 0; i < arr.length; i++) {
+      if (remaining <= 0) return 0;
+      if (!arr[i]) {
+        const give = Math.min(maxStack, remaining);
+        arr[i] = { itemId, count: give };
+        remaining -= give;
       }
     }
     return remaining;
   }
 
-  private section(s: SlotSection): (ItemStack | null)[] {
-    if (s === "main") return this.main;
-    if (s === "utility") return this.utility;
-    return this.skill;
+  consumeUtility(index: number): ItemStack | null {
+    const s = this.utility[index];
+    if (!s) return null;
+    s.count -= 1;
+    if (s.count <= 0) this.utility[index] = null;
+    return s;
   }
 }
