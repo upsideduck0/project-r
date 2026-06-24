@@ -18,6 +18,12 @@ export interface WeaponDef {
   projectileSpeed: number;
   projectileRange: number;
   projectileTexture: string;
+  // knockback to victim
+  knockX: number;
+  knockY: number;
+  // projectile feel
+  homingTurnRate: number;
+  glowTint: number;
   // visuals
   heldTexture: string;
 }
@@ -37,6 +43,10 @@ export const WEAPONS: Record<string, WeaponDef> = {
     projectileSpeed: 0,
     projectileRange: 0,
     projectileTexture: "",
+    knockX: 280,
+    knockY: -180,
+    homingTurnRate: 0,
+    glowTint: 0,
     heldTexture: "wpn-wooden-sword",
   },
   wooden_bow: {
@@ -51,8 +61,12 @@ export const WEAPONS: Record<string, WeaponDef> = {
     swingHeight: 0,
     swingDurationMs: 0,
     projectileSpeed: 560,
-    projectileRange: 540,
+    projectileRange: 560,
     projectileTexture: "proj-arrow",
+    knockX: 110,
+    knockY: -40,
+    homingTurnRate: 0,
+    glowTint: 0,
     heldTexture: "wpn-wooden-bow",
   },
   wooden_staff: {
@@ -66,9 +80,13 @@ export const WEAPONS: Record<string, WeaponDef> = {
     reach: 0,
     swingHeight: 0,
     swingDurationMs: 0,
-    projectileSpeed: 440,
-    projectileRange: 500,
+    projectileSpeed: 290,
+    projectileRange: 460,
     projectileTexture: "proj-orb",
+    knockX: 170,
+    knockY: -90,
+    homingTurnRate: 4.5,
+    glowTint: 0x9070ff,
     heldTexture: "wpn-wooden-staff",
   },
 };

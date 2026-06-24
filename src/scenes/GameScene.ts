@@ -155,8 +155,15 @@ export class GameScene extends Phaser.Scene {
       undefined,
       this,
     );
-    this.physics.add.collider(this.projectiles.getGroup(), this.solidPlatforms, (proj) =>
-      (proj as Phaser.Physics.Arcade.Image).destroy(),
+    this.physics.add.overlap(
+      this.projectiles.getGroup(),
+      this.solidPlatforms,
+      (proj) =>
+        this.projectiles.markForDestroy(
+          proj as Phaser.Physics.Arcade.Image,
+        ),
+      undefined,
+      this,
     );
 
     const kb = this.input.keyboard!;
@@ -243,7 +250,7 @@ export class GameScene extends Phaser.Scene {
     });
 
     this.updateWeaponVisual(now);
-    this.projectiles.update();
+    this.projectiles.update(dt);
 
     if (this.player.y > WORLD_HEIGHT + 100) this.damagePlayer(PLAYER_MAX_HP);
 
@@ -385,7 +392,8 @@ export class GameScene extends Phaser.Scene {
     body.setSize(w.reach, w.swingHeight);
     body.enable = true;
     this.attackHitbox.setData("damage", w.damage);
-    this.attackHitbox.setData("knockX", this.player.facing * 220);
+    this.attackHitbox.setData("knockX", this.player.facing * w.knockX);
+    this.attackHitbox.setData("knockY", w.knockY);
     body.updateFromGameObject();
     this.time.delayedCall(w.swingDurationMs, () => {
       this.attackHitbox.setFillStyle(0xffe680, 0);
@@ -416,6 +424,10 @@ export class GameScene extends Phaser.Scene {
       texture: w.projectileTexture,
       range: w.projectileRange,
       rotation: Math.atan2(dy, dx),
+      knockX: w.knockX,
+      knockY: w.knockY,
+      homingTurnRate: w.homingTurnRate,
+      glowTint: w.glowTint,
     });
     this.player.facing = dx >= 0 ? 1 : -1;
     this.player.setFlipX(this.player.facing === -1);
@@ -446,9 +458,10 @@ export class GameScene extends Phaser.Scene {
   private onMeleeHit(dummy: DummyEnemy): void {
     if (!dummy.active) return;
     const dmg = (this.attackHitbox.getData("damage") as number) ?? 0;
-    const knock = (this.attackHitbox.getData("knockX") as number) ?? 0;
+    const knockX = (this.attackHitbox.getData("knockX") as number) ?? 0;
+    const knockY = (this.attackHitbox.getData("knockY") as number) ?? -120;
     this.damageDummy(dummy, dmg);
-    (dummy.body as Phaser.Physics.Arcade.Body).setVelocity(knock, -160);
+    (dummy.body as Phaser.Physics.Arcade.Body).setVelocity(knockX, knockY);
   }
 
   private onProjectileHit(
@@ -456,14 +469,18 @@ export class GameScene extends Phaser.Scene {
     dummy: DummyEnemy,
   ): void {
     if (!dummy.active || !proj.active) return;
+    if (proj.getData("hit")) return;
+    proj.setData("hit", true);
     const dmg = (proj.getData("damage") as number) ?? 0;
+    const knockX = (proj.getData("knockX") as number) ?? 0;
+    const knockY = (proj.getData("knockY") as number) ?? -60;
     const vx = (proj.body as Phaser.Physics.Arcade.Body).velocity.x;
     this.damageDummy(dummy, dmg);
     (dummy.body as Phaser.Physics.Arcade.Body).setVelocity(
-      Math.sign(vx) * 140,
-      -120,
+      Math.sign(vx) * knockX,
+      knockY,
     );
-    proj.destroy();
+    this.projectiles.markForDestroy(proj);
   }
 
   private damageDummy(dummy: DummyEnemy, amount: number): void {
@@ -542,7 +559,10 @@ export class GameScene extends Phaser.Scene {
     d.maxHp = DUMMY_MAX_HP;
     d.spawnX = x;
     d.spawnY = y;
-    (d.body as Phaser.Physics.Arcade.Body).setSize(18, 26).setOffset(2, 2);
+    const dBody = d.body as Phaser.Physics.Arcade.Body;
+    dBody.setSize(18, 26).setOffset(2, 2);
+    dBody.setDragX(900);
+    dBody.setMaxVelocity(420, 900);
     d.hpBg = this.add
       .rectangle(x, y - 22, 34, 4, 0x000000, 0.7)
       .setDepth(900);
