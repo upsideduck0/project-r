@@ -1,7 +1,7 @@
 # project-r
 
-A 2D side-scrolling action prototype inspired by Roguelands, built with Phaser 3
-and TypeScript.
+A 2D side-scrolling action prototype inspired by Roguelands, built with
+Phaser 3 and TypeScript. Currently a focused combat sandbox.
 
 ## Stack
 - Phaser 3 (game engine)
@@ -17,35 +17,50 @@ npm run dev
 
 Then open the URL Vite prints (default http://localhost:5173).
 
-## Controls (Roguelands-inspired)
+## Controls
+
+Movement
 - Move left/right: `A` / `D`
-- Jump: `Space` — chainable (infinite, but each press is min 200ms apart; a
-  new press cancels the remaining upward velocity of the previous jump)
-- Dash left / right: `Q` / `E` — usable mid-air, chainable (min 100ms apart;
-  a new dash cancels the remaining distance of the previous one)
+- Jump: `Space` — chainable, costs stamina; cancels any in-progress dash
+- Dash left / right: `Q` / `E` — usable mid-air, latest dash overrides
 - Step up onto one-way platform above: `W`
 - Drop through one-way platform: `S`
-- Toggle weapon drawn (battle mode): right-click
-- Left-click: interact with environment (sheathed) / attack (drawn)
-- Select hotbar slot: `1`–`9`, `0` (slot 10)
-- Open/close inventory: `Tab` — drag items between any slots, Terraria-style
+
+Combat
+- Toggle Combat Mode: right-click (weapon becomes visible and left-click
+  attacks; out of combat, left-click is reserved for environment interaction)
+- Attack with equipped weapon: left-click (combat mode only); ranged and
+  magic projectiles aim toward the mouse cursor
+- Switch weapons: `1` Wooden Sword, `2` Wooden Bow, `3` Wooden Staff
+
+Misc
 - Restart after death: `R`
 
-Jumps and dashes consume **stamina**; **mana** regenerates passively and is
-reserved for skills added later.
+## What's in the combat sandbox
+- Player with HP, Stamina, Mana resources and bar HUD
+- Three test weapons:
+  - Wooden Sword — melee, costs stamina
+  - Wooden Bow — ranged, mouse-aimed projectile, costs stamina
+  - Wooden Staff — magic, mouse-aimed projectile, costs mana
+- Mode indicator at top center (EXPLORATION / COMBAT) and a weapon panel
+  at top right
+- Four dummy enemies at varied positions/heights with HP bars; they take
+  damage, knock back, die, and respawn after a delay
+- Floating damage numbers, hit flashes, dash ghost trail
 
-## What's in the prototype
-- Side-scrolling level with ground and platforms
-- Player with HP, jumping, double-direction facing
-- Melee attack with cooldown and a forward hitbox
-- Patrolling enemies with HP, knockback on hit, contact damage to the player
-- Camera follow, screen shake on hurt, simple parallax background
-- HUD with health bar
+## Code layout
 
-## Next steps (toward Roguelands-like depth)
-- Loot drops and an inventory
-- Ranged weapons and projectiles
-- Procedurally generated levels per run (rogue-lite loop)
-- Multiple enemy types and a boss
-- Equipment / crafting system
-- Sprite art to replace generated placeholders
+```
+src/
+  scenes/GameScene.ts        — playable test scene
+  data/weapons.ts            — weapon definitions + textures
+  systems/Projectiles.ts     — pooled arcade-physics projectiles
+
+  data/items.ts              — (parked) item registry for inventory
+  systems/Inventory.ts       — (parked) inventory model
+  ui/HotbarUI.ts             — (parked) bottom hotbar
+  ui/InventoryUI.ts          — (parked) inventory overlay
+```
+
+The parked modules are intentionally not wired into the current scene to
+keep the combat sandbox focused. They remain available to plug in later.
