@@ -75,7 +75,11 @@ export class ProjectileSystem {
   }
 
   markForDestroy(p: Phaser.Physics.Arcade.Image): void {
-    if (p && p.active) this.toKill.add(p);
+    if (!p || !p.active) return;
+    // Defensive: refuse to enqueue anything that isn't actually a member of
+    // this group (would otherwise destroy whatever sprite was passed in).
+    if (!this.group.contains(p)) return;
+    this.toKill.add(p);
   }
 
   update(dt: number): void {
@@ -134,6 +138,7 @@ export class ProjectileSystem {
 
   private killNow(p: Phaser.Physics.Arcade.Image): void {
     if (!p.active) return;
+    if (!this.group.contains(p)) return;
     const emitter = p.getData("emitter") as
       | Phaser.GameObjects.Particles.ParticleEmitter
       | undefined;

@@ -23,8 +23,7 @@ export interface PlayerView {
   alive: boolean;
 }
 
-const KNOCKBACK_MS = 220;
-const KNOCKBACK_STOP_EPSILON = 16;
+const KNOCKBACK_MS = 200;
 
 export abstract class Enemy {
   scene: Phaser.Scene;
@@ -63,8 +62,8 @@ export abstract class Enemy {
     this.sprite.setCollideWorldBounds(true);
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.setSize(cfg.bodyW, cfg.bodyH).setOffset(cfg.bodyOffX, cfg.bodyOffY);
-    body.setDragX(1400);
-    body.setMaxVelocity(420, 900);
+    body.setDragX(2000);
+    body.setMaxVelocity(360, 900);
     this.sprite.setData("enemy", this);
 
     this.hpBarOffsetY = -(cfg.bodyH / 2 + 10);
@@ -149,12 +148,13 @@ export abstract class Enemy {
     );
     this.hpFill.width = this.hpBarWidth * (this.hp / this.maxHp);
 
-    if (now > this.knockbackEndAt) {
+    if (this.state === "hurt" && now >= this.knockbackEndAt) {
+      // Deterministic stop: regardless of whether drag finished the job,
+      // zero the horizontal velocity at the end of the knockback window
+      // and let the subclass tick() decide what to do next.
       const body = this.sprite.body as Phaser.Physics.Arcade.Body;
-      if (Math.abs(body.velocity.x) < KNOCKBACK_STOP_EPSILON) {
-        body.setVelocityX(0);
-      }
-      if (this.state === "hurt") this.state = "idle";
+      body.setVelocityX(0);
+      this.state = "idle";
     }
 
     this.tick(now, dt, player);

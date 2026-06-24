@@ -277,10 +277,14 @@ export class GameScene extends Phaser.Scene {
       undefined,
       this,
     );
+    // NOTE: When Phaser arcade overlap is called with (group, single), it
+    // normalizes to (single, group) internally, so the callback ends up
+    // receiving (single, child). Passing (single, group) explicitly here
+    // keeps the callback args unambiguous.
     this.physics.add.overlap(
-      this.enemyProjectiles.getGroup(),
       this.player,
-      (proj) =>
+      this.enemyProjectiles.getGroup(),
+      (_player, proj) =>
         this.onEnemyProjectileHit(proj as Phaser.Physics.Arcade.Image),
       undefined,
       this,
