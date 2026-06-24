@@ -12,7 +12,11 @@ export interface ProjectileSpawnConfig {
   knockX: number;
   knockY: number;
   homingTurnRate: number;
+  gravityAfterMs: number;
+  piercing: boolean;
   glowTint: number;
+  glowFrequencyMs: number;
+  glowLifespanMs: number;
 }
 
 export class ProjectileSystem {
@@ -45,17 +49,24 @@ export class ProjectileSystem {
     p.setData("knockX", cfg.knockX);
     p.setData("knockY", cfg.knockY);
     p.setData("turnRate", cfg.homingTurnRate);
+    p.setData("piercing", cfg.piercing);
     p.setData("hit", false);
-    (p.body as Phaser.Physics.Arcade.Body).setAllowGravity(false);
+    p.setData("hitSet", new Set<unknown>());
+    p.setData(
+      "gravityAt",
+      cfg.gravityAfterMs > 0 ? this.scene.time.now + cfg.gravityAfterMs : -1,
+    );
+    const body = p.body as Phaser.Physics.Arcade.Body;
+    body.setAllowGravity(false);
 
     if (cfg.glowTint) {
       const emitter = this.scene.add.particles(0, 0, cfg.texture, {
         follow: p,
-        lifespan: 320,
-        scale: { start: 0.8, end: 0.1 },
-        alpha: { start: 0.55, end: 0 },
+        lifespan: cfg.glowLifespanMs || 320,
+        scale: { start: 1.0, end: 0.05 },
+        alpha: { start: 0.7, end: 0 },
         tint: cfg.glowTint,
-        frequency: 26,
+        frequency: cfg.glowFrequencyMs || 26,
         blendMode: "ADD",
       });
       emitter.setDepth(p.depth - 1);
@@ -71,6 +82,7 @@ export class ProjectileSystem {
     const pointer = this.scene.input.activePointer;
     const cx = pointer.worldX;
     const cy = pointer.worldY;
+    const now = this.scene.time.now;
 
     const snapshot = this.group.getChildren().slice();
     for (const obj of snapshot) {
@@ -87,9 +99,17 @@ export class ProjectileSystem {
         continue;
       }
 
+      const body = p.body as Phaser.Physics.Arcade.Body;
+      const gravityAt = p.getData("gravityAt") as number;
+      if (gravityAt > 0 && now >= gravityAt) {
+        if (!body.allowGravity) body.setAllowGravity(true);
+        if (Math.abs(body.velocity.x) > 1 || Math.abs(body.velocity.y) > 1) {
+          p.setRotation(Math.atan2(body.velocity.y, body.velocity.x));
+        }
+      }
+
       const turnRate = p.getData("turnRate") as number;
       if (turnRate > 0) {
-        const body = p.body as Phaser.Physics.Arcade.Body;
         const speed = Math.hypot(body.velocity.x, body.velocity.y);
         if (speed > 1) {
           const desired = Math.atan2(cy - p.y, cx - p.x);
@@ -119,7 +139,7 @@ export class ProjectileSystem {
       | undefined;
     if (emitter) {
       emitter.stop();
-      this.scene.time.delayedCall(400, () => {
+      this.scene.time.delayedCall(500, () => {
         if (emitter && emitter.scene) emitter.destroy();
       });
     }

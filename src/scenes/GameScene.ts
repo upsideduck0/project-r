@@ -158,10 +158,11 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.overlap(
       this.projectiles.getGroup(),
       this.solidPlatforms,
-      (proj) =>
-        this.projectiles.markForDestroy(
-          proj as Phaser.Physics.Arcade.Image,
-        ),
+      (proj) => {
+        const p = proj as Phaser.Physics.Arcade.Image;
+        if (p.getData("piercing")) return;
+        this.projectiles.markForDestroy(p);
+      },
       undefined,
       this,
     );
@@ -427,7 +428,11 @@ export class GameScene extends Phaser.Scene {
       knockX: w.knockX,
       knockY: w.knockY,
       homingTurnRate: w.homingTurnRate,
+      gravityAfterMs: w.projectileGravityAfterMs,
+      piercing: w.piercing,
       glowTint: w.glowTint,
+      glowFrequencyMs: w.glowFrequencyMs,
+      glowLifespanMs: w.glowLifespanMs,
     });
     this.player.facing = dx >= 0 ? 1 : -1;
     this.player.setFlipX(this.player.facing === -1);
@@ -469,8 +474,15 @@ export class GameScene extends Phaser.Scene {
     dummy: DummyEnemy,
   ): void {
     if (!dummy.active || !proj.active) return;
-    if (proj.getData("hit")) return;
-    proj.setData("hit", true);
+    const piercing = proj.getData("piercing") as boolean;
+    if (piercing) {
+      const hitSet = proj.getData("hitSet") as Set<DummyEnemy>;
+      if (hitSet.has(dummy)) return;
+      hitSet.add(dummy);
+    } else {
+      if (proj.getData("hit")) return;
+      proj.setData("hit", true);
+    }
     const dmg = (proj.getData("damage") as number) ?? 0;
     const knockX = (proj.getData("knockX") as number) ?? 0;
     const knockY = (proj.getData("knockY") as number) ?? -60;
@@ -480,7 +492,7 @@ export class GameScene extends Phaser.Scene {
       Math.sign(vx) * knockX,
       knockY,
     );
-    this.projectiles.markForDestroy(proj);
+    if (!piercing) this.projectiles.markForDestroy(proj);
   }
 
   private damageDummy(dummy: DummyEnemy, amount: number): void {

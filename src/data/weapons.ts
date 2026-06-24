@@ -18,12 +18,16 @@ export interface WeaponDef {
   projectileSpeed: number;
   projectileRange: number;
   projectileTexture: string;
+  projectileGravityAfterMs: number;
+  piercing: boolean;
   // knockback to victim
   knockX: number;
   knockY: number;
   // projectile feel
   homingTurnRate: number;
   glowTint: number;
+  glowFrequencyMs: number;
+  glowLifespanMs: number;
   // visuals
   heldTexture: string;
 }
@@ -43,10 +47,14 @@ export const WEAPONS: Record<string, WeaponDef> = {
     projectileSpeed: 0,
     projectileRange: 0,
     projectileTexture: "",
+    projectileGravityAfterMs: 0,
+    piercing: false,
     knockX: 280,
     knockY: -180,
     homingTurnRate: 0,
     glowTint: 0,
+    glowFrequencyMs: 0,
+    glowLifespanMs: 0,
     heldTexture: "wpn-wooden-sword",
   },
   wooden_bow: {
@@ -61,12 +69,16 @@ export const WEAPONS: Record<string, WeaponDef> = {
     swingHeight: 0,
     swingDurationMs: 0,
     projectileSpeed: 560,
-    projectileRange: 560,
+    projectileRange: 720,
     projectileTexture: "proj-arrow",
+    projectileGravityAfterMs: 280,
+    piercing: false,
     knockX: 110,
     knockY: -40,
     homingTurnRate: 0,
     glowTint: 0,
+    glowFrequencyMs: 0,
+    glowLifespanMs: 0,
     heldTexture: "wpn-wooden-bow",
   },
   wooden_staff: {
@@ -80,13 +92,17 @@ export const WEAPONS: Record<string, WeaponDef> = {
     reach: 0,
     swingHeight: 0,
     swingDurationMs: 0,
-    projectileSpeed: 290,
-    projectileRange: 460,
-    projectileTexture: "proj-orb",
-    knockX: 170,
-    knockY: -90,
-    homingTurnRate: 4.5,
-    glowTint: 0x9070ff,
+    projectileSpeed: 600,
+    projectileRange: 280,
+    projectileTexture: "proj-white-orb",
+    projectileGravityAfterMs: 0,
+    piercing: true,
+    knockX: 60,
+    knockY: -30,
+    homingTurnRate: 0,
+    glowTint: 0xffffff,
+    glowFrequencyMs: 10,
+    glowLifespanMs: 460,
     heldTexture: "wpn-wooden-staff",
   },
 };
@@ -136,6 +152,12 @@ export function buildWeaponTextures(scene: Phaser.Scene): void {
     g.fillCircle(6, 6, 3);
     g.fillStyle(0xffffff, 0.9);
     g.fillCircle(5, 5, 1);
+  });
+  drawTex(scene, "proj-white-orb", 16, 16, (g) => {
+    g.fillStyle(0xb0d0ff, 0.55);
+    g.fillCircle(8, 8, 7);
+    g.fillStyle(0xffffff, 1);
+    g.fillCircle(8, 8, 5);
   });
 }
 
