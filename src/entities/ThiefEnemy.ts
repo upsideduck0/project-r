@@ -1,6 +1,10 @@
 import Phaser from "phaser";
 import { Enemy, PlayerView } from "./Enemy";
 import { SKILLS } from "../data/skills";
+import { computeStatsAtLevel } from "../systems/stats/formulas";
+
+const THIEF_ATTRS = { VIT: 4, MIG: 6, AGI: 22, INT: 2, INS: 2, PRE: 4 };
+const THIEF_STATS = computeStatsAtLevel(THIEF_ATTRS, 10);
 
 const HARASS_RANGE = 180;
 const MELEE_RANGE = 64;
@@ -26,11 +30,9 @@ export class ThiefEnemy extends Enemy {
       hpBarWidth: 28,
       respawnMs: 3500,
       trackingDelayMs: 100,
-      attributes: { VIT: 4, MIG: 6, AGI: 18, INT: 0, INS: 0, PRE: 0 },
-      mainStats: {
-        HP: 50, MP: 20, STA: 54, ATK: 12, DEF: 6, MS: 9, AS: 7.2, TEN: 0,
-      },
-      subStats: { GEN: 5 },
+      attributes: THIEF_ATTRS,
+      mainStats: THIEF_STATS.main,
+      subStats: THIEF_STATS.sub,
       heldWeaponTexture: "wpn-dagger",
       heldWeaponScale: 1,
       heldWeaponOffsetX: 8,

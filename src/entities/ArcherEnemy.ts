@@ -1,5 +1,9 @@
 import Phaser from "phaser";
 import { Enemy, PlayerView } from "./Enemy";
+import { computeStatsAtLevel } from "../systems/stats/formulas";
+
+const ARCHER_ATTRS = { VIT: 6, MIG: 8, AGI: 14, INT: 6, INS: 8, PRE: 4 };
+const ARCHER_STATS = computeStatsAtLevel(ARCHER_ATTRS, 10);
 
 // Archer: a physical ranged enemy. Where the caster lobs magic orbs, the
 // archer fires arrows that travel fast then arc downward (gravity after a
@@ -20,11 +24,9 @@ export class ArcherEnemy extends Enemy {
       hpBarWidth: 34,
       respawnMs: 4000,
       trackingDelayMs: 500,
-      attributes: { VIT: 5, MIG: 7, AGI: 12, INT: 6, INS: 8, PRE: 3 },
-      mainStats: {
-        HP: 50, MP: 30, STA: 20, ATK: 9, DEF: 4, MS: 1.7, AS: 2, TEN: 0,
-      },
-      subStats: { GEN: 2 },
+      attributes: ARCHER_ATTRS,
+      mainStats: ARCHER_STATS.main,
+      subStats: ARCHER_STATS.sub,
       heldWeaponTexture: "wpn-wooden-bow",
       heldWeaponScale: 1,
       heldWeaponOffsetX: 10,

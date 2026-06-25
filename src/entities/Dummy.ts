@@ -1,5 +1,9 @@
 import Phaser from "phaser";
 import { Enemy } from "./Enemy";
+import { computeStatsAtLevel } from "../systems/stats/formulas";
+
+const DUMMY_ATTRS = { VIT: 10, MIG: 0, AGI: 0, INT: 0, INS: 0, PRE: 0 };
+const DUMMY_STATS = computeStatsAtLevel(DUMMY_ATTRS, 10);
 
 export class Dummy extends Enemy {
   constructor(scene: Phaser.Scene, x: number, y: number) {
@@ -12,11 +16,9 @@ export class Dummy extends Enemy {
       bodyOffX: 2,
       bodyOffY: 2,
       respawnMs: 3500,
-      attributes: { VIT: 10, MIG: 1, AGI: 1, INT: 1, INS: 1, PRE: 1 },
-      mainStats: {
-        HP: 80, MP: 0, STA: 0, ATK: 5, DEF: 0, MS: 0, AS: 1, TEN: 0,
-      },
-      subStats: { GEN: 0 },
+      attributes: DUMMY_ATTRS,
+      mainStats: DUMMY_STATS.main,
+      subStats: DUMMY_STATS.sub,
     });
   }
 }

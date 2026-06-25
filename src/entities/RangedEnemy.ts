@@ -1,6 +1,10 @@
 import Phaser from "phaser";
 import { Enemy, PlayerView } from "./Enemy";
 import { SKILLS } from "../data/skills";
+import { computeStatsAtLevel } from "../systems/stats/formulas";
+
+const CASTER_ATTRS = { VIT: 4, MIG: 2, AGI: 6, INT: 18, INS: 12, PRE: 4 };
+const CASTER_STATS = computeStatsAtLevel(CASTER_ATTRS, 10);
 
 const ATTACK_RANGE = 360; // x-distance from player a platform must be within
 const HOP_TRIGGER = 200; // hop when the player gets this close
@@ -27,11 +31,9 @@ export class RangedEnemy extends Enemy {
       bodyOffY: 2,
       respawnMs: 4500,
       trackingDelayMs: 500,
-      attributes: { VIT: 4, MIG: 4, AGI: 6, INT: 14, INS: 10, PRE: 4 },
-      mainStats: {
-        HP: 48, MP: 144, STA: 18, ATK: 8, DEF: 6, MS: 3, AS: 2.4, TEN: 4,
-      },
-      subStats: { GEN: 10 },
+      attributes: CASTER_ATTRS,
+      mainStats: CASTER_STATS.main,
+      subStats: CASTER_STATS.sub,
       heldWeaponTexture: "wpn-wooden-staff",
       heldWeaponScale: 1,
       heldWeaponOffsetX: 9,

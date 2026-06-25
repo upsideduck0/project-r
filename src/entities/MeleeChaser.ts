@@ -1,7 +1,10 @@
 import Phaser from "phaser";
 import { Enemy, PlayerView } from "./Enemy";
+import { computeStatsAtLevel } from "../systems/stats/formulas";
 
 const LEASH_DISTANCE = 360;
+const CHASER_ATTRS = { VIT: 6, MIG: 10, AGI: 12, INT: 2, INS: 2, PRE: 2 };
+const CHASER_STATS = computeStatsAtLevel(CHASER_ATTRS, 10);
 
 export class MeleeChaser extends Enemy {
   private cachedVx = 0;
@@ -17,11 +20,9 @@ export class MeleeChaser extends Enemy {
       bodyOffY: 2,
       respawnMs: 3500,
       trackingDelayMs: 500,
-      attributes: { VIT: 6, MIG: 8, AGI: 10, INT: 2, INS: 2, PRE: 2 },
-      mainStats: {
-        HP: 60, MP: 0, STA: 20, ATK: 10, DEF: 5, MS: 3.1, AS: 3, TEN: 0,
-      },
-      subStats: { GEN: 1 },
+      attributes: CHASER_ATTRS,
+      mainStats: CHASER_STATS.main,
+      subStats: CHASER_STATS.sub,
       heldWeaponTexture: "wpn-wooden-sword",
       heldWeaponScale: 1,
       heldWeaponOffsetX: 10,

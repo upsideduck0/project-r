@@ -170,11 +170,14 @@ export class GameScene extends Phaser.Scene {
     this.seedInventory();
     this.caster = this.buildSkillCaster();
 
-    // Character stat framework for the player. Parallel to the current
-    // hardcoded HP/MP/STA gameplay values (no rebalance yet); future systems
-    // and the /stats command read from here.
+    // Character stat framework for the player. Per the current spec the
+    // player starts at 0 across the board — every attribute, every main and
+    // sub stat. Authored mode skips the attribute-derive table so the zeros
+    // pass straight through.
     this.playerStats = new StatBlock({
-      attributes: { VIT: 10, MIG: 10, AGI: 10, INT: 10, INS: 10, PRE: 10 },
+      attributes: { VIT: 0, MIG: 0, AGI: 0, INT: 0, INS: 0, PRE: 0 },
+      mainStatMode: "authored",
+      subStatMode: "authored",
     });
 
     this.buildHud();

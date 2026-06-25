@@ -1,6 +1,10 @@
 import Phaser from "phaser";
 import { Enemy, PlayerView } from "./Enemy";
 import { SKILLS } from "../data/skills";
+import { computeStatsAtLevel } from "../systems/stats/formulas";
+
+const COMMANDER_ATTRS = { VIT: 12, MIG: 4, AGI: 4, INT: 8, INS: 10, PRE: 18 };
+const COMMANDER_STATS = computeStatsAtLevel(COMMANDER_ATTRS, 10);
 
 const KITE_DISTANCE = 260; // stays back behind the frontline
 const BOW_RANGE = 520;
@@ -30,11 +34,9 @@ export class CommanderEnemy extends Enemy {
       hpBarWidth: 60,
       respawnMs: 8000,
       trackingDelayMs: 500,
-      attributes: { VIT: 10, MIG: 6, AGI: 6, INT: 8, INS: 8, PRE: 18 },
-      mainStats: {
-        HP: 200, MP: 100, STA: 18, ATK: 12, DEF: 30, MS: 3, AS: 2.4, TEN: 10,
-      },
-      subStats: { GEN: 10 },
+      attributes: COMMANDER_ATTRS,
+      mainStats: COMMANDER_STATS.main,
+      subStats: COMMANDER_STATS.sub,
       heldWeaponTexture: "wpn-wooden-bow",
       heldWeaponScale: 1,
       heldWeaponOffsetX: 10,

@@ -1,6 +1,10 @@
 import Phaser from "phaser";
 import { Enemy, PlayerView } from "./Enemy";
 import { SKILLS } from "../data/skills";
+import { computeStatsAtLevel } from "../systems/stats/formulas";
+
+const FIGHTER_ATTRS = { VIT: 8, MIG: 18, AGI: 8, INT: 2, INS: 2, PRE: 2 };
+const FIGHTER_STATS = computeStatsAtLevel(FIGHTER_ATTRS, 10);
 
 const MELEE_RANGE = 60;
 const LEASH = 360;
@@ -20,11 +24,9 @@ export class FighterEnemy extends Enemy {
       hpBarWidth: 38,
       respawnMs: 3500,
       trackingDelayMs: 500,
-      attributes: { VIT: 8, MIG: 14, AGI: 8, INT: 0, INS: 0, PRE: 0 },
-      mainStats: {
-        HP: 100, MP: 30, STA: 24, ATK: 18, DEF: 12, MS: 4, AS: 3, TEN: 6,
-      },
-      subStats: { GEN: 3 },
+      attributes: FIGHTER_ATTRS,
+      mainStats: FIGHTER_STATS.main,
+      subStats: FIGHTER_STATS.sub,
       heldWeaponTexture: "wpn-iron-greatsword",
       heldWeaponScale: 1,
       heldWeaponOffsetX: 12,

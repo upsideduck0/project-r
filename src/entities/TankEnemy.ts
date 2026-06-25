@@ -1,6 +1,10 @@
 import Phaser from "phaser";
 import { Enemy, PlayerView } from "./Enemy";
 import { SKILLS } from "../data/skills";
+import { computeStatsAtLevel } from "../systems/stats/formulas";
+
+const TANK_ATTRS = { VIT: 22, MIG: 10, AGI: 2, INT: 2, INS: 2, PRE: 4 };
+const TANK_STATS = computeStatsAtLevel(TANK_ATTRS, 10);
 
 const ALLY_THREAT_RANGE = 160;
 const SLAM_RANGE = 115;
@@ -22,12 +26,9 @@ export class TankEnemy extends Enemy {
       hpBarWidth: 56,
       respawnMs: 6000,
       trackingDelayMs: 500,
-      // AGI 1 (override): tiny jump, slow.
-      attributes: { VIT: 22, MIG: 10, AGI: 1, INT: 2, INS: 2, PRE: 4 },
-      mainStats: {
-        HP: 216, MP: 10, STA: 9, ATK: 20, DEF: 33, MS: 1.5, AS: 1.2, TEN: 22,
-      },
-      subStats: { GEN: 2 },
+      attributes: TANK_ATTRS,
+      mainStats: TANK_STATS.main,
+      subStats: TANK_STATS.sub,
       heldWeaponTexture: "wpn-tower-shield",
       heldWeaponScale: 1,
       heldWeaponOffsetX: 14,
