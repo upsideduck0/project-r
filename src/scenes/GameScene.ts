@@ -451,16 +451,6 @@ export class GameScene extends Phaser.Scene {
         if (e) this.registerEnemy(e);
         return e;
       },
-      damagePlayerInRange: (range, dmg, knockX, knockY) => {
-        if (dmg <= 0) return;
-        const d = Phaser.Math.Distance.Between(
-          self.sprite.x, self.sprite.y, this.player.x, this.player.y,
-        );
-        if (d > range) return;
-        this.damagePlayer(dmg);
-        const dir = this.player.x < self.sprite.x ? -1 : 1;
-        (this.player.body as Phaser.Physics.Arcade.Body).setVelocity(dir * knockX, knockY);
-      },
     };
   }
 
@@ -1122,11 +1112,18 @@ export class GameScene extends Phaser.Scene {
       ) as Phaser.Physics.Arcade.Image;
       rw.refreshBody();
     }
-    // Three in-air one-way platforms
+    // Two tiers of one-way platforms. Lower tier sits closer to the ground
+    // so even slow jumpers (tank, AGI 2) can climb up; upper tier sits a
+    // single jump above the lower so anyone on it can chain up.
     const platSpots: Array<[number, number]> = [
-      [220, 380],
+      // lower tier
+      [220, 410],
+      [480, 410],
+      [740, 410],
+      // upper tier
+      [220, 300],
       [480, 300],
-      [740, 380],
+      [740, 300],
     ];
     for (const [px, py] of platSpots) {
       const p = this.oneWayPlatforms.create(

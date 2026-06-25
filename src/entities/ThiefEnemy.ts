@@ -104,6 +104,6 @@ export class ThiefEnemy extends Enemy {
     }
 
     body.setVelocityX(this.cachedVx);
-    if (this.state === "aggro" && player.y < this.sprite.y - 40) this.tryJump();
+    if (this.state === "aggro" && this.shouldJumpToPlatform(player)) this.tryJump();
   }
 }

@@ -63,15 +63,15 @@ export interface EnemyAbilityContext {
   worldMaxX: number;
   spawnProjectile(cfg: ProjectileSpawnConfig): void;
   summon(kind: string, x: number, y: number): Enemy | null;
-  damagePlayerInRange(range: number, damage: number, knockX: number, knockY: number): void;
 }
 
 const KNOCKBACK_MS = 200;
 // Stat-unit -> pixel conversions (centralized so tuning is one place).
 const MS_TO_PX = 350; // movement: pixels/sec per MS point (MS = 0.05×AGI, so 350 keeps speeds sane)
 const ATTACK_INTERVAL_BASE = 2550; // attack interval ms = BASE / AS
-const JUMP_BASE = 200; // upward velocity floor
-const JUMP_PER_AGI = 16; // + per AGI point (jump height scales with AGI)
+const JUMP_BASE = 420; // upward velocity floor — tuned so the slowest jumper
+                       // (AGI 2 tank) clears the lower-to-upper platform gap.
+const JUMP_PER_AGI = 20; // + per AGI point (jump height scales with AGI)
 
 interface AuraInstance {
   data: AuraSkillData;
@@ -344,6 +344,26 @@ export abstract class Enemy {
     const agi = this.stats.getAttributes().AGI;
     body.setVelocityY(-(JUMP_BASE + agi * JUMP_PER_AGI));
     return true;
+  }
+
+  // True when there's a platform overhead that this enemy could land on AND
+  // the player is at-or-above that platform — i.e. jumping would meaningfully
+  // help reach the player. Used so enemies only jump for climbing, not for
+  // "the player is in the air".
+  protected shouldJumpToPlatform(player: PlayerView): boolean {
+    if (!this.ability) return false;
+    if (player.y >= this.sprite.y - 30) return false;
+    const agi = this.stats.getAttributes().AGI;
+    const v = JUMP_BASE + agi * JUMP_PER_AGI;
+    // Phaser gravity 900; peak rise = v² / (2g).
+    const reach = (v * v) / 1800;
+    for (const p of this.ability.platformTops()) {
+      if (Math.abs(p.x - this.sprite.x) > 90) continue;
+      const dy = this.sprite.y - p.y;
+      if (dy <= 4 || dy > reach) continue;
+      if (player.y <= p.y + 40) return true;
+    }
+    return false;
   }
 
   private performDash(distance: number, direction: DashDirection): void {

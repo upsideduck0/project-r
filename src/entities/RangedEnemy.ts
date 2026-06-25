@@ -9,7 +9,8 @@ const CASTER_STATS = computeStatsAtLevel(CASTER_ATTRS, 10);
 const ATTACK_RANGE = 360; // x-distance from player a platform must be within
 const HOP_TRIGGER = 200; // hop when the player gets this close
 const HOP_COOLDOWN_MS = 1500;
-const FLOOR_Y = 400; // sprite y above this threshold = on a platform
+const FLOOR_Y = 430; // sprite y above this threshold = on a platform (lower
+                     // platform sits at center y=410 → sprite rests near 392)
 
 // Caster: stays on a platform lobbing orb volleys (mana_release) and hops to a
 // further platform when the player gets close. If knocked or pushed onto the
