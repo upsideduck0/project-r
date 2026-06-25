@@ -3,6 +3,8 @@ import { Enemy, PlayerView } from "./Enemy";
 import { SKILLS } from "../data/skills";
 
 const ALLY_THREAT_RANGE = 160;
+const SLAM_RANGE = 115;
+const SLAM_BONUS_DMG = 10;
 
 export class TankEnemy extends Enemy {
   private cachedVx = 0;
@@ -63,6 +65,31 @@ export class TankEnemy extends Enemy {
 
     body.setVelocityX(this.cachedVx);
     if (this.state === "aggro" && player.y < this.sprite.y - 40) this.tryJump();
+
+    if (this.state === "aggro") this.performSlam(now, player);
+  }
+
+  private performSlam(now: number, player: PlayerView): void {
+    if (this.distanceTo(player) > SLAM_RANGE) return;
+    const dmg = this.tryAttackPlayer(now, { vit: player.vit, def: player.def });
+    if (dmg === null) return;
+
+    // Shockwave visual at feet
+    const sx = this.sprite.x;
+    const sy = this.sprite.y + 10;
+    const wave = this.scene.add.circle(sx, sy, 8, 0xffffff, 0.55)
+      .setStrokeStyle(2, 0xaaaaff, 0.8)
+      .setDepth(15);
+    this.scene.tweens.add({
+      targets: wave,
+      radius: SLAM_RANGE,
+      alpha: 0,
+      duration: 340,
+      ease: "Sine.easeOut",
+      onComplete: () => wave.destroy(),
+    });
+
+    this.ability?.damagePlayerInRange(SLAM_RANGE, dmg + SLAM_BONUS_DMG, 200, -300);
   }
 
   private shouldProtect(player: PlayerView): boolean {

@@ -63,6 +63,7 @@ export interface EnemyAbilityContext {
   worldMaxX: number;
   spawnProjectile(cfg: ProjectileSpawnConfig): void;
   summon(kind: string, x: number, y: number): Enemy | null;
+  damagePlayerInRange(range: number, damage: number, knockX: number, knockY: number): void;
 }
 
 const KNOCKBACK_MS = 200;
@@ -128,6 +129,8 @@ export abstract class Enemy {
   private heldWeaponOffsetX = 9;
   private heldWeaponOffsetY = 4;
   private heldWeaponRotation = 0.25;
+  private swingState = { angle: 0 };
+  private swingGeneration = 0;
 
   private auras: AuraInstance[] = [];
   protected summons: Enemy[] = [];
@@ -603,12 +606,38 @@ export abstract class Enemy {
     if (this.hp <= 0) this.die();
   }
 
+  protected triggerWeaponSwing(durationMs: number): void {
+    if (!this.heldWeapon) return;
+    this.swingState.angle = 0;
+    const gen = ++this.swingGeneration;
+    this.scene.tweens.addCounter({
+      from: 0,
+      to: 1,
+      duration: durationMs,
+      onUpdate: (tw) => {
+        if (this.swingGeneration !== gen) return;
+        const p = tw.getValue() ?? 0;
+        if (p < 0.3) {
+          this.swingState.angle = Phaser.Math.Linear(0, -0.9, p / 0.3);
+        } else if (p < 0.8) {
+          this.swingState.angle = Phaser.Math.Linear(-0.9, 1.6, (p - 0.3) / 0.5);
+        } else {
+          this.swingState.angle = Phaser.Math.Linear(1.6, 0, (p - 0.8) / 0.2);
+        }
+      },
+      onComplete: () => {
+        if (this.swingGeneration === gen) this.swingState.angle = 0;
+      },
+    });
+  }
+
   tryAttackPlayer(
     now: number,
     victim: { vit: number; def: number },
   ): number | null {
     if (now - this.lastAttackAt < this.attackIntervalMs()) return null;
     this.lastAttackAt = now;
+    this.triggerWeaponSwing(this.attackIntervalMs() * 0.55);
     // Tackle damage = |VIT diff| - victim DEF (clamped at 0). Weapons are
     // the primary source of damage; tackles are a small nudge for chunky
     // attackers ramming weaker targets.
@@ -636,6 +665,8 @@ export abstract class Enemy {
     this.heldWeapon?.setVisible(false);
     this.hideBuffGlow();
     this.clearAllAuras(); // buffs this enemy granted vanish immediately
+    this.swingGeneration++;
+    this.swingState.angle = 0;
     this.onDeath();
   }
 
@@ -653,6 +684,8 @@ export abstract class Enemy {
     this.hpBg.setVisible(true);
     this.hpFill.setVisible(true);
     this.heldWeapon?.setVisible(true);
+    this.swingGeneration++;
+    this.swingState.angle = 0;
     if (this.buffSources.size > 0) this.showBuffGlow();
   }
 
@@ -684,7 +717,7 @@ export abstract class Enemy {
           this.sprite.x + facing * this.heldWeaponOffsetX,
           this.sprite.y + this.heldWeaponOffsetY,
         )
-        .setRotation(facing * this.heldWeaponRotation)
+        .setRotation(facing * (this.heldWeaponRotation + this.swingState.angle))
         .setFlipX(facing === -1);
     }
 

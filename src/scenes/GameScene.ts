@@ -286,8 +286,6 @@ export class GameScene extends Phaser.Scene {
   private setupCollisions(): void {
     this.physics.add.collider(this.player, this.solidPlatforms);
     this.physics.add.collider(this.enemies, this.solidPlatforms);
-    // Enemies push each other apart so they don't stack on the same tile.
-    this.physics.add.collider(this.enemies, this.enemies);
     this.physics.add.collider(
       this.player,
       this.oneWayPlatforms,
@@ -448,6 +446,16 @@ export class GameScene extends Phaser.Scene {
         const e = this.createEnemyByKind(kind, sx, sy);
         if (e) this.registerEnemy(e);
         return e;
+      },
+      damagePlayerInRange: (range, dmg, knockX, knockY) => {
+        if (dmg <= 0) return;
+        const d = Phaser.Math.Distance.Between(
+          self.sprite.x, self.sprite.y, this.player.x, this.player.y,
+        );
+        if (d > range) return;
+        this.damagePlayer(dmg);
+        const dir = this.player.x < self.sprite.x ? -1 : 1;
+        (this.player.body as Phaser.Physics.Arcade.Body).setVelocity(dir * knockX, knockY);
       },
     };
   }
