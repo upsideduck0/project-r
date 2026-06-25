@@ -2,11 +2,17 @@ import Phaser from "phaser";
 import { Enemy, PlayerView } from "./Enemy";
 import { SKILLS } from "../data/skills";
 
-const PANIC_RANGE = 90;
-const HARASS_RANGE = 150;
+const HARASS_RANGE = 180;
+const MELEE_RANGE = 64;
+const HITS_BEFORE_RETREAT = 2;
 
+// Thief: harasses at range while shadowstep is on cooldown, then leaps onto
+// the player and tries to land a couple of strikes. After taking ~2 hits in
+// aggressive mode, retreats back to harass distance until shadowstep refreshes.
 export class ThiefEnemy extends Enemy {
   private cachedVx = 0;
+  private aggressive = false;
+  private hitsInAggro = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, {
@@ -22,11 +28,28 @@ export class ThiefEnemy extends Enemy {
       trackingDelayMs: 100,
       attributes: { VIT: 4, MIG: 6, AGI: 18, INT: 0, INS: 0, PRE: 0 },
       mainStats: {
-        HP: 25, MP: 20, STA: 54, ATK: 12, DEF: 6, MS: 9, AS: 7.2, TEN: 0,
+        HP: 50, MP: 20, STA: 54, ATK: 12, DEF: 6, MS: 9, AS: 7.2, TEN: 0,
       },
       subStats: { GEN: 5 },
+      heldWeaponTexture: "wpn-dagger",
+      heldWeaponScale: 1,
+      heldWeaponOffsetX: 8,
+      heldWeaponOffsetY: 4,
+      heldWeaponRotation: 0.35,
     });
     this.addSkill(SKILLS.shadowstep);
+  }
+
+  takeDamage(amount: number, knockX: number, knockY: number): void {
+    super.takeDamage(amount, knockX, knockY);
+    if (!this.alive) return;
+    if (this.aggressive) {
+      this.hitsInAggro++;
+      if (this.hitsInAggro >= HITS_BEFORE_RETREAT) {
+        this.aggressive = false;
+        this.hitsInAggro = 0;
+      }
+    }
   }
 
   protected tick(now: number, _dt: number, player: PlayerView): void {
@@ -45,18 +68,34 @@ export class ThiefEnemy extends Enemy {
         this.cachedVx = 0;
       } else {
         this.state = "aggro";
-        // Shadowstep: bail when the player is right on top of us.
-        if (dist < PANIC_RANGE && this.castSkill(SKILLS.shadowstep, now)) {
+        // When shadowstep is ready, leap onto the player and go aggressive.
+        if (!this.aggressive && this.castSkill(SKILLS.shadowstep, now)) {
+          this.aggressive = true;
+          this.hitsInAggro = 0;
+          this.tryAttackPlayer(now, { vit: player.vit, def: player.def });
           return;
         }
         const speed = this.moveSpeedPx();
-        if (dist < HARASS_RANGE) {
+        if (this.aggressive) {
+          // Chase the player and try to land contact strikes.
+          if (dist > MELEE_RANGE) {
+            const dir = player.x < this.sprite.x ? -1 : 1;
+            this.cachedVx = speed * dir;
+            this.sprite.setFlipX(dir === -1);
+          } else {
+            this.cachedVx = 0;
+            this.sprite.setFlipX(player.x < this.sprite.x);
+            this.tryAttackPlayer(now, { vit: player.vit, def: player.def });
+          }
+        } else if (dist < HARASS_RANGE) {
+          // Harass: keep distance, side-stepping back from the player.
           const dir = player.x < this.sprite.x ? 1 : -1;
           this.cachedVx = speed * 0.6 * dir;
           this.sprite.setFlipX(player.x < this.sprite.x);
         } else {
+          // Close in slowly until in harass range.
           const dir = player.x < this.sprite.x ? -1 : 1;
-          this.cachedVx = speed * dir;
+          this.cachedVx = speed * 0.7 * dir;
           this.sprite.setFlipX(dir === -1);
         }
       }

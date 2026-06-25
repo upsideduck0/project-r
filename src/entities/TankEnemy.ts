@@ -23,9 +23,14 @@ export class TankEnemy extends Enemy {
       // AGI 1 (override): tiny jump, slow.
       attributes: { VIT: 22, MIG: 10, AGI: 1, INT: 2, INS: 2, PRE: 4 },
       mainStats: {
-        HP: 108, MP: 10, STA: 9, ATK: 20, DEF: 33, MS: 1.5, AS: 1.2, TEN: 22,
+        HP: 216, MP: 10, STA: 9, ATK: 20, DEF: 33, MS: 1.5, AS: 1.2, TEN: 22,
       },
       subStats: { GEN: 2 },
+      heldWeaponTexture: "wpn-tower-shield",
+      heldWeaponScale: 1,
+      heldWeaponOffsetX: 14,
+      heldWeaponOffsetY: 0,
+      heldWeaponRotation: 0,
     });
     this.addSkill(SKILLS.protect);
   }

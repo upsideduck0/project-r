@@ -22,9 +22,14 @@ export class ArcherEnemy extends Enemy {
       trackingDelayMs: 500,
       attributes: { VIT: 5, MIG: 7, AGI: 12, INT: 6, INS: 8, PRE: 3 },
       mainStats: {
-        HP: 25, MP: 30, STA: 20, ATK: 9, DEF: 4, MS: 1.7, AS: 2, TEN: 0,
+        HP: 50, MP: 30, STA: 20, ATK: 9, DEF: 4, MS: 1.7, AS: 2, TEN: 0,
       },
       subStats: { GEN: 2 },
+      heldWeaponTexture: "wpn-wooden-bow",
+      heldWeaponScale: 1,
+      heldWeaponOffsetX: 10,
+      heldWeaponOffsetY: 2,
+      heldWeaponRotation: 0,
     });
   }
 
@@ -52,7 +57,7 @@ export class ArcherEnemy extends Enemy {
     else if (dist > PREFERRED_DISTANCE + 40) body.setVelocityX(dirSign * speed);
     else body.setVelocityX(0);
 
-    const dmg = this.tryAttackPlayer(now);
+    const dmg = this.tryAttackPlayer(now, { vit: player.vit, def: player.def });
     if (dmg !== null && this.ability) {
       const ox = this.sprite.x + dirSign * 10;
       const oy = this.sprite.y - 4;

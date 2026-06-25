@@ -137,7 +137,7 @@ export const SKILLS: Record<string, SkillDef> = {
     core: {
       id: "shadowstep",
       name: "Shadowstep",
-      description: "Teleport away from danger.",
+      description: "Teleport onto the target and strike.",
       icon: "skill-blink",
       rarity: "common",
       manaCost: 20,
@@ -150,10 +150,10 @@ export const SKILLS: Record<string, SkillDef> = {
     },
     scaling: { AGI: 1.0 },
     dash: {
-      distance: 120,
+      distance: 180,
       durationMs: 0,
       invulnMs: 200,
-      direction: "away_from_target",
+      direction: "toward_target",
       flashColor: 0xf4d35e,
     },
   },
@@ -241,9 +241,20 @@ export const SKILLS: Record<string, SkillDef> = {
       durationMs: -1, // infinite (passive)
       global: true,
       kindEffects: {
-        tank: [{ stat: "DEF", op: "flat", value: 20 }],
-        fighter: [{ stat: "AS", op: "percent", value: 50 }],
-        thief: [{ stat: "MS", op: "percent", value: 50 }],
+        "*": [{ stat: "DEF", op: "flat", value: 100 }],
+        tank: [{ stat: "DEF", op: "flat", value: 100 }],
+        fighter: [
+          { stat: "DEF", op: "flat", value: 100 },
+          { stat: "AS", op: "percent", value: 50 },
+        ],
+        thief: [
+          { stat: "DEF", op: "flat", value: 100 },
+          { stat: "MS", op: "percent", value: 50 },
+        ],
+        caster: [
+          { stat: "DEF", op: "flat", value: 100 },
+          { stat: "GEN", op: "flat", value: 5 },
+        ],
       },
     },
   },
@@ -271,11 +282,11 @@ export const SKILLS: Record<string, SkillDef> = {
       direction: "to_furthest_platform",
     },
     summon: {
-      summonType: "fighter",
+      summonType: "chaser",
       durationMs: -1,
       maxActive: 1,
-      summonHp: 100,
-      summonAtk: 18,
+      summonHp: 60,
+      summonAtk: 10,
     },
   },
 };

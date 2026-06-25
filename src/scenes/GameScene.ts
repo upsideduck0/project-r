@@ -1,11 +1,19 @@
 import Phaser from "phaser";
-import { WEAPONS, WeaponDef, buildWeaponTextures } from "../data/weapons";
+import {
+  WEAPONS,
+  WeaponDef,
+  buildWeaponTextures,
+  computeWeaponDamage,
+  meetsWeaponRequirements,
+  weaponCooldownMs,
+} from "../data/weapons";
 import { ProjectileSpawnConfig, ProjectileSystem } from "../systems/Projectiles";
 import {
   ITEMS,
   buildItemIcons,
 } from "../data/items";
 import { Inventory } from "../systems/Inventory";
+import { tackleDamage } from "../systems/combat";
 import {
   SKILLS,
   SkillCaster,
@@ -239,7 +247,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (this.attackHitbox.body.enable) {
-      const offsetX = this.player.facing * (this.player.weapon.reach / 2);
+      const offsetX = this.player.facing * (this.player.weapon.range / 2);
       this.attackHitbox.setPosition(this.player.x + offsetX, this.player.y);
       (this.attackHitbox.body as Phaser.Physics.Arcade.Body).updateFromGameObject();
     }
@@ -249,6 +257,8 @@ export class GameScene extends Phaser.Scene {
       y: this.player.y,
       facing: this.player.facing,
       alive: this.player.active,
+      vit: this.playerStats.getAttributes().VIT,
+      def: this.playerStats.getMain("DEF"),
     };
     for (const e of this.enemyEntities) e.update(now, dt, playerView);
 
@@ -426,6 +436,8 @@ export class GameScene extends Phaser.Scene {
         y: this.player.y,
         facing: this.player.facing,
         alive: this.player.active,
+        vit: this.playerStats.getAttributes().VIT,
+        def: this.playerStats.getMain("DEF"),
       }),
       allies: () => this.enemyEntities.filter((e) => e !== self && e.alive),
       platformTops: () => this.platformTops(),
@@ -559,7 +571,7 @@ export class GameScene extends Phaser.Scene {
       const sel = this.player.weapon.id === w.id ? ">" : " ";
       const sta = w.staminaCost ? ` ${w.staminaCost}sta` : "";
       const mp = w.manaCost ? ` ${w.manaCost}mp` : "";
-      lines.push(`${sel} ${keys[i]}: ${w.name} (${w.damage} dmg${sta}${mp})`);
+      lines.push(`${sel} ${keys[i]}: ${w.name} (${w.baseDamage} dmg${sta}${mp})`);
     }
     this.weaponPanel.setText(lines.join("\n"));
   }
@@ -567,9 +579,11 @@ export class GameScene extends Phaser.Scene {
   private fireWeapon(): void {
     const w = this.player.weapon;
     const now = this.time.now;
-    if (now - this.player.lastAttackAt < w.cooldownMs) return;
+    const cd = weaponCooldownMs(w);
+    if (now - this.player.lastAttackAt < cd) return;
     if (this.player.stamina < w.staminaCost) return;
     if (this.player.mana < w.manaCost) return;
+    if (!meetsWeaponRequirements(w, this.playerStats.getAttributes())) return;
     this.player.stamina -= w.staminaCost;
     this.player.mana -= w.manaCost;
     this.player.lastAttackAt = now;
@@ -578,18 +592,22 @@ export class GameScene extends Phaser.Scene {
     else this.fireProjectile(w);
   }
 
+  private computePlayerWeaponDamage(w: WeaponDef): number {
+    return computeWeaponDamage(w, this.playerStats.getAttributes());
+  }
+
   private fireMelee(w: WeaponDef): void {
-    const offsetX = this.player.facing * (w.reach / 2);
+    const offsetX = this.player.facing * (w.range / 2);
     this.attackHitbox
-      .setSize(w.reach, w.swingHeight)
+      .setSize(w.range, w.swingHeight)
       .setPosition(this.player.x + offsetX, this.player.y)
       .setFillStyle(0xffe680, 0.5);
     const body = this.attackHitbox.body as Phaser.Physics.Arcade.Body;
-    body.setSize(w.reach, w.swingHeight);
+    body.setSize(w.range, w.swingHeight);
     body.enable = true;
-    this.attackHitbox.setData("damage", w.damage);
-    this.attackHitbox.setData("knockX", this.player.facing * w.knockX);
-    this.attackHitbox.setData("knockY", w.knockY);
+    this.attackHitbox.setData("damage", this.computePlayerWeaponDamage(w));
+    this.attackHitbox.setData("knockX", this.player.facing * w.knockback.x);
+    this.attackHitbox.setData("knockY", w.knockback.y);
     // Fresh per-swing hit set so each enemy only takes one tick of damage
     // during a single swing, even while overlapping the hitbox for several
     // frames.
@@ -620,12 +638,12 @@ export class GameScene extends Phaser.Scene {
       y: oy,
       vx: dx * w.projectileSpeed,
       vy: dy * w.projectileSpeed,
-      damage: w.damage,
+      damage: this.computePlayerWeaponDamage(w),
       texture: w.projectileTexture,
-      range: w.projectileRange,
+      range: w.range,
       rotation: Math.atan2(dy, dx),
-      knockX: w.knockX,
-      knockY: w.knockY,
+      knockX: w.knockback.x,
+      knockY: w.knockback.y,
       homingTurnRate: w.homingTurnRate,
       gravityAfterMs: w.projectileGravityAfterMs,
       piercing: w.piercing,
@@ -916,9 +934,23 @@ export class GameScene extends Phaser.Scene {
   private onPlayerTouchEnemy(enemySprite: Phaser.Physics.Arcade.Sprite): void {
     const enemy = enemySprite.getData("enemy") as Enemy | undefined;
     if (!enemy || !enemy.alive) return;
-    const dmg = enemy.tryAttackPlayer(this.time.now);
+    const playerAttrs = this.playerStats.getAttributes();
+    const playerDef = this.playerStats.getMain("DEF");
+    const enemyAttrs = enemy.stats.getAttributes();
+    const enemyDef = enemy.stats.getMain("DEF");
+    const dmg = enemy.tryAttackPlayer(this.time.now, {
+      vit: playerAttrs.VIT,
+      def: playerDef,
+    });
     if (dmg === null) return;
-    this.damagePlayer(dmg);
+    if (dmg > 0) this.damagePlayer(dmg);
+    // Player's reciprocal tackle on the enemy (no cooldown gating beyond
+    // the natural contact rate from physics overlap).
+    const tackleBack = tackleDamage(playerAttrs.VIT, enemyAttrs.VIT, enemyDef);
+    if (tackleBack > 0) {
+      const dir = enemy.sprite.x < this.player.x ? -1 : 1;
+      enemy.takeDamage(tackleBack, dir * 80, -60);
+    }
     const dir = this.player.x < enemy.sprite.x ? -1 : 1;
     (this.player.body as Phaser.Physics.Arcade.Body).setVelocity(dir * 220, -220);
   }

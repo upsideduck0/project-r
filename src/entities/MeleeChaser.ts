@@ -19,9 +19,14 @@ export class MeleeChaser extends Enemy {
       trackingDelayMs: 500,
       attributes: { VIT: 6, MIG: 8, AGI: 10, INT: 2, INS: 2, PRE: 2 },
       mainStats: {
-        HP: 30, MP: 0, STA: 20, ATK: 10, DEF: 5, MS: 3.1, AS: 3, TEN: 0,
+        HP: 60, MP: 0, STA: 20, ATK: 10, DEF: 5, MS: 3.1, AS: 3, TEN: 0,
       },
       subStats: { GEN: 1 },
+      heldWeaponTexture: "wpn-wooden-sword",
+      heldWeaponScale: 1,
+      heldWeaponOffsetX: 10,
+      heldWeaponOffsetY: 4,
+      heldWeaponRotation: 0.35,
     });
   }
 

@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { StatBlock } from "../systems/stats/StatBlock";
 import { AttributeSet, MainStatSet, SubStatSet } from "../systems/stats/types";
 import { applyRegen } from "../systems/regen";
+import { tackleDamage } from "../systems/combat";
 import { ProjectileSpawnConfig } from "../systems/Projectiles";
 import {
   AuraSkillData,
@@ -34,6 +35,13 @@ export interface EnemyConfig {
   attributes?: Partial<AttributeSet>;
   mainStats?: Partial<MainStatSet>;
   subStats?: Partial<SubStatSet>;
+  // Optional held-weapon texture (rendered offset from the sprite while the
+  // enemy is in combat — for this test room, that's always).
+  heldWeaponTexture?: string;
+  heldWeaponScale?: number;
+  heldWeaponOffsetX?: number;
+  heldWeaponOffsetY?: number;
+  heldWeaponRotation?: number;
 }
 
 export interface PlayerView {
@@ -41,6 +49,8 @@ export interface PlayerView {
   y: number;
   facing: 1 | -1;
   alive: boolean;
+  vit: number;
+  def: number;
 }
 
 // Capabilities the scene grants each enemy so its skills can reach into the
@@ -108,12 +118,19 @@ export abstract class Enemy {
   private respawnMs: number;
 
   // Buff bookkeeping: sourceId -> StatBlock modifier ids it owns.
+  // Free-form behaviour markers (e.g. "healed_by_commander"). Distinct from
+  // stat modifiers — these are just tags other enemies can query.
+  markers = new Set<string>();
   private buffSources = new Map<string, string[]>();
   private buffGlow: Phaser.GameObjects.Ellipse;
   private buffGlowTween?: Phaser.Tweens.Tween;
+  private heldWeapon?: Phaser.GameObjects.Image;
+  private heldWeaponOffsetX = 9;
+  private heldWeaponOffsetY = 4;
+  private heldWeaponRotation = 0.25;
 
   private auras: AuraInstance[] = [];
-  private summons: Enemy[] = [];
+  protected summons: Enemy[] = [];
   private skillCdUntil = new Map<string, number>();
   private nextAttackBonus = 0;
   private nextAttackBonusUntil = 0;
@@ -178,6 +195,16 @@ export abstract class Enemy {
       .setBlendMode(Phaser.BlendModes.ADD)
       .setDepth(5)
       .setVisible(false);
+
+    if (cfg.heldWeaponTexture) {
+      this.heldWeapon = scene.add
+        .image(x, y, cfg.heldWeaponTexture)
+        .setDepth(13)
+        .setScale(cfg.heldWeaponScale ?? 1);
+      this.heldWeaponOffsetX = cfg.heldWeaponOffsetX ?? 9;
+      this.heldWeaponOffsetY = cfg.heldWeaponOffsetY ?? 4;
+      this.heldWeaponRotation = cfg.heldWeaponRotation ?? 0.25;
+    }
   }
 
   // ----- Stat-derived gameplay values -----
@@ -258,7 +285,7 @@ export abstract class Enemy {
     return this.caster;
   }
 
-  private facingSign(): 1 | -1 {
+  protected facingSign(): 1 | -1 {
     return this.sprite.flipX ? -1 : 1;
   }
 
@@ -382,7 +409,7 @@ export abstract class Enemy {
     return best;
   }
 
-  private performSummon(opts: {
+  protected performSummon(opts: {
     summonType: string;
     maxActive: number;
     hp: number;
@@ -576,12 +603,20 @@ export abstract class Enemy {
     if (this.hp <= 0) this.die();
   }
 
-  tryAttackPlayer(now: number): number | null {
+  tryAttackPlayer(
+    now: number,
+    victim: { vit: number; def: number },
+  ): number | null {
     if (now - this.lastAttackAt < this.attackIntervalMs()) return null;
     this.lastAttackAt = now;
-    // Bodily contact damage = 1×VIT before any downstream calc (e.g. DEF).
-    // Projectile / skill damage is a separate path and uses skill values.
-    let dmg = Math.max(1, Math.round(this.stats.getAttributes().VIT));
+    // Tackle damage = |VIT diff| - victim DEF (clamped at 0). Weapons are
+    // the primary source of damage; tackles are a small nudge for chunky
+    // attackers ramming weaker targets.
+    let dmg = tackleDamage(
+      this.stats.getAttributes().VIT,
+      victim.vit,
+      victim.def,
+    );
     if (now < this.nextAttackBonusUntil) {
       dmg += this.nextAttackBonus;
       this.nextAttackBonus = 0;
@@ -598,6 +633,7 @@ export abstract class Enemy {
     (this.sprite.body as Phaser.Physics.Arcade.Body).enable = false;
     this.hpBg.setVisible(false);
     this.hpFill.setVisible(false);
+    this.heldWeapon?.setVisible(false);
     this.hideBuffGlow();
     this.clearAllAuras(); // buffs this enemy granted vanish immediately
     this.onDeath();
@@ -616,6 +652,7 @@ export abstract class Enemy {
     body.setVelocity(0, 0);
     this.hpBg.setVisible(true);
     this.hpFill.setVisible(true);
+    this.heldWeapon?.setVisible(true);
     if (this.buffSources.size > 0) this.showBuffGlow();
   }
 
@@ -639,6 +676,17 @@ export abstract class Enemy {
 
   update(now: number, dt: number, player: PlayerView): void {
     if (!this.alive) return;
+
+    if (this.heldWeapon) {
+      const facing = this.facingSign();
+      this.heldWeapon
+        .setPosition(
+          this.sprite.x + facing * this.heldWeaponOffsetX,
+          this.sprite.y + this.heldWeaponOffsetY,
+        )
+        .setRotation(facing * this.heldWeaponRotation)
+        .setFlipX(facing === -1);
+    }
 
     this.hpBg.setPosition(this.sprite.x, this.sprite.y + this.hpBarOffsetY);
     this.hpFill.setPosition(
