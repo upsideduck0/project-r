@@ -241,18 +241,18 @@ export const SKILLS: Record<string, SkillDef> = {
       durationMs: -1, // infinite (passive)
       global: true,
       kindEffects: {
-        "*": [{ stat: "DEF", op: "flat", value: 100 }],
-        tank: [{ stat: "DEF", op: "flat", value: 100 }],
+        "*": [{ stat: "DEF", op: "flat", value: 200 }],
+        tank: [{ stat: "DEF", op: "flat", value: 200 }],
         fighter: [
-          { stat: "DEF", op: "flat", value: 100 },
+          { stat: "DEF", op: "flat", value: 200 },
           { stat: "AS", op: "percent", value: 50 },
         ],
         thief: [
-          { stat: "DEF", op: "flat", value: 100 },
+          { stat: "DEF", op: "flat", value: 200 },
           { stat: "MS", op: "percent", value: 50 },
         ],
         caster: [
-          { stat: "DEF", op: "flat", value: 100 },
+          { stat: "DEF", op: "flat", value: 200 },
           { stat: "GEN", op: "flat", value: 5 },
         ],
       },

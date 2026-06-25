@@ -182,6 +182,7 @@ export class GameScene extends Phaser.Scene {
       attributes: { VIT: 0, MIG: 0, AGI: 0, INT: 0, INS: 0, PRE: 0 },
       mainStatMode: "authored",
       subStatMode: "authored",
+      level: 1,
     });
 
     this.buildHud();
@@ -468,15 +469,16 @@ export class GameScene extends Phaser.Scene {
   }
 
   private spawnEnemies(): void {
-    // Default test room: tank (front), thief, fighter, caster (on a platform),
-    // commander — five enemies.
+    // Default test room: clustered on the commander's (right) half of the
+    // screen — tank in front of the line, thief and fighter mid, caster on the
+    // rightmost platform, commander at the very back.
     const tops = this.platformTops();
     const casterPlat = tops.length > 0 ? tops[tops.length - 1] : { x: 740, y: 340 };
     const ground: Array<[string, number]> = [
-      ["tank", 280],
-      ["thief", 470],
-      ["fighter", 650],
-      ["commander", 850],
+      ["tank", 560],
+      ["thief", 680],
+      ["fighter", 780],
+      ["commander", 880],
     ];
     for (const [kind, x] of ground) {
       const e = this.createEnemyByKind(kind, x, GROUND_Y - 60);

@@ -3,7 +3,7 @@ import { Enemy } from "./Enemy";
 import { computeStatsAtLevel } from "../systems/stats/formulas";
 
 const DUMMY_ATTRS = { VIT: 10, MIG: 0, AGI: 0, INT: 0, INS: 0, PRE: 0 };
-const DUMMY_STATS = computeStatsAtLevel(DUMMY_ATTRS, 10);
+const DUMMY_STATS = computeStatsAtLevel(DUMMY_ATTRS, 1);
 
 export class Dummy extends Enemy {
   constructor(scene: Phaser.Scene, x: number, y: number) {

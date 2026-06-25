@@ -4,7 +4,7 @@ import { computeStatsAtLevel } from "../systems/stats/formulas";
 
 const LEASH_DISTANCE = 360;
 const CHASER_ATTRS = { VIT: 6, MIG: 10, AGI: 12, INT: 2, INS: 2, PRE: 2 };
-const CHASER_STATS = computeStatsAtLevel(CHASER_ATTRS, 10);
+const CHASER_STATS = computeStatsAtLevel(CHASER_ATTRS, 1);
 
 export class MeleeChaser extends Enemy {
   private cachedVx = 0;

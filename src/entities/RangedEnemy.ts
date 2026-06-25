@@ -4,7 +4,7 @@ import { SKILLS } from "../data/skills";
 import { computeStatsAtLevel } from "../systems/stats/formulas";
 
 const CASTER_ATTRS = { VIT: 4, MIG: 2, AGI: 6, INT: 18, INS: 12, PRE: 4 };
-const CASTER_STATS = computeStatsAtLevel(CASTER_ATTRS, 10);
+const CASTER_STATS = computeStatsAtLevel(CASTER_ATTRS, 1);
 
 const ATTACK_RANGE = 360; // x-distance from player a platform must be within
 const HOP_TRIGGER = 200; // hop when the player gets this close

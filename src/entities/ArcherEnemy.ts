@@ -3,7 +3,7 @@ import { Enemy, PlayerView } from "./Enemy";
 import { computeStatsAtLevel } from "../systems/stats/formulas";
 
 const ARCHER_ATTRS = { VIT: 6, MIG: 8, AGI: 14, INT: 6, INS: 8, PRE: 4 };
-const ARCHER_STATS = computeStatsAtLevel(ARCHER_ATTRS, 10);
+const ARCHER_STATS = computeStatsAtLevel(ARCHER_ATTRS, 1);
 
 // Archer: a physical ranged enemy. Where the caster lobs magic orbs, the
 // archer fires arrows that travel fast then arc downward (gravity after a

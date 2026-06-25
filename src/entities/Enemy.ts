@@ -35,6 +35,7 @@ export interface EnemyConfig {
   attributes?: Partial<AttributeSet>;
   mainStats?: Partial<MainStatSet>;
   subStats?: Partial<SubStatSet>;
+  level?: number;
   // Optional held-weapon texture (rendered offset from the sprite while the
   // enemy is in combat — for this test room, that's always).
   heldWeaponTexture?: string;
@@ -159,6 +160,7 @@ export abstract class Enemy {
       baseSubStats: cfg.subStats,
       mainStatMode: "authored",
       subStatMode: "authored",
+      level: cfg.level ?? 1,
     });
 
     this.maxHp = Math.round(this.stats.getMain("HP")) || 1;

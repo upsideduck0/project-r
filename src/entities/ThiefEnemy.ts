@@ -4,7 +4,7 @@ import { SKILLS } from "../data/skills";
 import { computeStatsAtLevel } from "../systems/stats/formulas";
 
 const THIEF_ATTRS = { VIT: 4, MIG: 6, AGI: 22, INT: 2, INS: 2, PRE: 4 };
-const THIEF_STATS = computeStatsAtLevel(THIEF_ATTRS, 10);
+const THIEF_STATS = computeStatsAtLevel(THIEF_ATTRS, 1);
 
 const HARASS_RANGE = 180;
 const MELEE_RANGE = 64;

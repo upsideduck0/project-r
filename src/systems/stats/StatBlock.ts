@@ -43,6 +43,7 @@ export interface StatBlockConfig {
   // hand-tuned stat sheets are exact, while the player stays derived.
   mainStatMode?: "derived" | "authored";
   subStatMode?: "derived" | "authored";
+  level?: number;
 }
 
 export interface StatSnapshot {
@@ -52,6 +53,7 @@ export interface StatSnapshot {
 }
 
 export class StatBlock {
+  readonly level: number;
   private baseAttributes: AttributeSet;
   private baseMain: Partial<MainStatSet>;
   private baseSub: Partial<SubStatSet>;
@@ -70,6 +72,7 @@ export class StatBlock {
     this.baseSub = { ...(cfg.baseSubStats ?? {}) };
     this.mainMode = cfg.mainStatMode ?? "derived";
     this.subMode = cfg.subStatMode ?? "derived";
+    this.level = cfg.level ?? 1;
   }
 
   // ----- Base attribute editing (e.g. spending attribute points) -----
@@ -200,6 +203,7 @@ export class StatBlock {
         .map(([k, v]) => `${k} ${round(v)}`)
         .join("  ");
     const lines = [
+      `LVL  | ${this.level}`,
       "ATTR | " + fmt(this.finalAttributes),
       "MAIN | " + fmt(this.finalMain),
       "SUB  | " + fmt(this.finalSub),

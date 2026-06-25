@@ -4,7 +4,7 @@ import { SKILLS } from "../data/skills";
 import { computeStatsAtLevel } from "../systems/stats/formulas";
 
 const FIGHTER_ATTRS = { VIT: 8, MIG: 18, AGI: 8, INT: 2, INS: 2, PRE: 2 };
-const FIGHTER_STATS = computeStatsAtLevel(FIGHTER_ATTRS, 10);
+const FIGHTER_STATS = computeStatsAtLevel(FIGHTER_ATTRS, 1);
 
 const MELEE_RANGE = 60;
 const LEASH = 360;
