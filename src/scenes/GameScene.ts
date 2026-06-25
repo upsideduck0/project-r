@@ -47,6 +47,7 @@ const JUMP_STAMINA_COST = 15;
 const DASH_SPEED = 620;
 const DASH_DURATION_MS = 160;
 const DASH_STAMINA_COST = 25;
+const DASH_COOLDOWN_MS = 1000;
 const STEP_UP_VELOCITY = 360;
 const DROP_THROUGH_MS = 280;
 
@@ -113,6 +114,7 @@ export class GameScene extends Phaser.Scene {
   private combatMode = false;
   private devConsole!: DevConsole;
   private playerStats!: StatBlock;
+  private lastDashAt = -Infinity;
 
   constructor() {
     super("GameScene");
@@ -135,6 +137,7 @@ export class GameScene extends Phaser.Scene {
     buildItemIcons(this);
     buildSkillIcons(this);
     this.makeOrb("proj-enemy-shot", 0xff6f7a);
+    this.makeOrb("proj-musket-ball", 0x707888);
   }
 
   create(): void {
@@ -495,10 +498,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   private tryDash(dir: 1 | -1): void {
+    const now = this.time.now;
+    if (now - this.lastDashAt < DASH_COOLDOWN_MS) return;
     if (this.player.stamina < DASH_STAMINA_COST) return;
     this.player.stamina -= DASH_STAMINA_COST;
-    this.player.dashUntil = this.time.now + DASH_DURATION_MS;
+    this.player.dashUntil = now + DASH_DURATION_MS;
     this.player.dashDir = dir;
+    this.player.invulnUntil = Math.max(this.player.invulnUntil, now + DASH_DURATION_MS);
+    this.lastDashAt = now;
     this.spawnDashTrail();
   }
 

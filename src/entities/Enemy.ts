@@ -267,7 +267,6 @@ export abstract class Enemy {
       executeSkill(skill, this.getCaster(), {
         damage: {
           attributes: this.stats.getAttributes(),
-          atk: this.atk,
           amp: this.stats.getSub("AMP"),
         },
       });
