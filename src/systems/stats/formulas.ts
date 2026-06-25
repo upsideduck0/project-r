@@ -80,42 +80,40 @@ export function deriveSubStats(attrs: AttributeSet): SubStatSet {
   return out;
 }
 
-// New per-attribute spec applied at a given character level. Returns finished
+// Per-attribute spec applied at a given character level. Returns finished
 // main/sub stat sheets ready to be authored into an Enemy.
 //
 // Bases at level L:
-//   HP  = 100 + 10*L
-//   ATK = 10 + 0.1*L
-//   DEF = 10 + 0.1*L
-//   AS  = 7
-//   TEN = 0
-//   MP/STA/MS have no documented base → 0 (per "stats unable to calculate
-//   can be set to 0").
-//
-// HP/MP/STA are multiplier-based; everything else is additive.
+//   HP  = (100 + 10*L) × (1 + 0.02×VIT)
+//   MP  = (100 +  5*L) × (1 + 0.03×INT + 0.05×INS + 0.01×PRE)
+//   STA = (100 +  5*L) × (1 + 0.05×MIG + 0.05×AGI + 0.01×PRE)
+//   ATK = (10 + 0.1*L) + 3×MIG + 2×INT + 1×PRE
+//   DEF = (10 + 0.1*L) + 3×VIT + 1×PRE
+//   MS  = 0.05×AGI          (unit: see MS_TO_PX in Enemy.ts)
+//   AS  = 7 + 0.05×AGI
+//   TEN = 0.3×VIT
 export function computeStatsAtLevel(
   attrs: Partial<AttributeSet>,
   level: number,
 ): { main: Partial<MainStatSet>; sub: Partial<SubStatSet> } {
   const a = { ...zeroAttributesLocal(), ...(attrs ?? {}) };
 
-  const hpBase = 100 + 10 * level;
+  const hpBase  = 100 + 10 * level;
+  const mpBase  = 100 +  5 * level;
+  const staBase = 100 +  5 * level;
   const atkBase = 10 + 0.1 * level;
   const defBase = 10 + 0.1 * level;
-
-  const hpMult = 1 + 0.01 * a.VIT;
-  // MP and STA bases are undocumented; multiplying 0 leaves them at 0.
 
   const round = (n: number) => Math.round(n * 100) / 100;
 
   const main: Partial<MainStatSet> = {
-    HP: round(hpBase * hpMult),
-    MP: 0,
-    STA: 0,
+    HP:  round(hpBase  * (1 + 0.02 * a.VIT)),
+    MP:  round(mpBase  * (1 + 0.03 * a.INT + 0.05 * a.INS + 0.01 * a.PRE)),
+    STA: round(staBase * (1 + 0.05 * a.MIG + 0.05 * a.AGI + 0.01 * a.PRE)),
     ATK: round(atkBase + 3 * a.MIG + 2 * a.INT + 1 * a.PRE),
     DEF: round(defBase + 3 * a.VIT + 1 * a.PRE),
-    MS: round(0.005 * a.AGI),
-    AS: round(7 + 0.05 * a.AGI),
+    MS:  round(0.05 * a.AGI),
+    AS:  round(7 + 0.05 * a.AGI),
     TEN: round(0.3 * a.VIT),
   };
 

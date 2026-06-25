@@ -68,7 +68,7 @@ export interface EnemyAbilityContext {
 
 const KNOCKBACK_MS = 200;
 // Stat-unit -> pixel conversions (centralized so tuning is one place).
-const MS_TO_PX = 35; // movement: pixels/sec per MS point
+const MS_TO_PX = 350; // movement: pixels/sec per MS point (MS = 0.05×AGI, so 350 keeps speeds sane)
 const ATTACK_INTERVAL_BASE = 2550; // attack interval ms = BASE / AS
 const JUMP_BASE = 200; // upward velocity floor
 const JUMP_PER_AGI = 16; // + per AGI point (jump height scales with AGI)
