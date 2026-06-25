@@ -115,6 +115,8 @@ export class GameScene extends Phaser.Scene {
   private devConsole!: DevConsole;
   private playerStats!: StatBlock;
   private lastDashAt = -Infinity;
+  private focusUntil = -Infinity;
+  private nimbleUntil = -Infinity;
 
   constructor() {
     super("GameScene");
@@ -235,9 +237,11 @@ export class GameScene extends Phaser.Scene {
     const dashing = now < this.player.dashUntil;
     const left = this.cursors.left?.isDown || this.keyA.isDown;
     const right = this.cursors.right?.isDown || this.keyD.isDown;
+    const nimbleActive = now < this.nimbleUntil;
+    const effectiveSpeed = nimbleActive ? PLAYER_SPEED * 1.2 : PLAYER_SPEED;
     if (!dashing) {
-      if (left && !right) body.setVelocityX(-PLAYER_SPEED);
-      else if (right && !left) body.setVelocityX(PLAYER_SPEED);
+      if (left && !right) body.setVelocityX(-effectiveSpeed);
+      else if (right && !left) body.setVelocityX(effectiveSpeed);
       else body.setVelocityX(0);
     } else {
       body.setVelocityX(DASH_SPEED * this.player.dashDir);
@@ -590,7 +594,7 @@ export class GameScene extends Phaser.Scene {
   private fireWeapon(): void {
     const w = this.player.weapon;
     const now = this.time.now;
-    const cd = weaponCooldownMs(w);
+    const cd = weaponCooldownMs(w) / (now < this.nimbleUntil ? 1.2 : 1);
     if (now - this.player.lastAttackAt < cd) return;
     if (this.player.stamina < w.staminaCost) return;
     if (this.player.mana < w.manaCost) return;
@@ -608,7 +612,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private computePlayerWeaponDamage(w: WeaponDef): number {
-    return computeWeaponDamage(w, this.playerStats.getAttributes());
+    const base = computeWeaponDamage(w, this.playerStats.getAttributes());
+    return this.time.now < this.focusUntil ? Math.round(base * 1.3) : base;
   }
 
   private fireMelee(w: WeaponDef): void {
@@ -1030,6 +1035,11 @@ export class GameScene extends Phaser.Scene {
       applyInvuln: (ms) => {
         this.player.invulnUntil = Math.max(this.player.invulnUntil, this.time.now + ms);
       },
+      applyTimedBuff: (resource, durationMs) => {
+        const until = this.time.now + durationMs;
+        if (resource === "focus") this.focusUntil = until;
+        else if (resource === "nimble") this.nimbleUntil = until;
+      },
       flash: (color, ms) => this.flashPlayer(color, ms),
       castVisual: (color, radius) => this.spawnCastVisual(this.player.x, this.player.y, color, radius),
     };
@@ -1061,10 +1071,8 @@ export class GameScene extends Phaser.Scene {
   private seedInventory(): void {
     this.inventory.addItem("utility", "hp_potion", 5, ITEMS.hp_potion.maxStack);
     this.inventory.addItem("utility", "mp_potion", 5, ITEMS.mp_potion.maxStack);
-    this.inventory.setSkill(0, { skillId: "fireball" });
-    this.inventory.setSkill(1, { skillId: "heal" });
-    this.inventory.setSkill(2, { skillId: "surge" });
-    this.inventory.setSkill(3, { skillId: "blink" });
+    this.inventory.setSkill(0, { skillId: "focus" });
+    this.inventory.setSkill(1, { skillId: "nimble" });
   }
 
   // -------- Spawns / world --------

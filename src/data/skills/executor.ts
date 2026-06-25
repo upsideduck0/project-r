@@ -172,6 +172,10 @@ function runBuff(data: BuffSkillData, caster: SkillCaster): void {
     else if (data.resource === "mp") caster.restoreMana(data.effectStrength);
     else if (data.resource === "sta") caster.restoreStamina(data.effectStrength);
   }
+  // Timed custom resource buff (focus, nimble, etc.).
+  if (data.resource && data.durationMs > 0 && caster.applyTimedBuff) {
+    caster.applyTimedBuff(data.resource, data.durationMs);
+  }
   // Timed stat modifiers (optional hook).
   if (data.statMods && data.durationMs > 0 && caster.applyTimedSelfBuff) {
     caster.applyTimedSelfBuff(data.statMods, data.durationMs);

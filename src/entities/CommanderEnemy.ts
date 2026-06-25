@@ -11,7 +11,7 @@ const BOW_RANGE = 520;
 const ARROW_SPEED = 460;
 const HEAL_COOLDOWN_MS = 10000; // commander pacing between heals
 const HEAL_FRACTION = 0.5; // heals 50% of the target's max HP
-const BUFF_DEF_AMOUNT = 200; // flat DEF buff granted to every ally + self
+const BUFF_DEF_AMOUNT = 100; // flat DEF buff granted to every ally
 const BUFF_BROADCAST_DELAY_MS = 600;
 const BUFF_BROADCAST_STAGGER_MS = 180;
 
@@ -153,7 +153,6 @@ export class CommanderEnemy extends Enemy {
   // so heals aren't wasted.
   private findHealTarget(): Enemy | null {
     const pool: Enemy[] = this.ability ? this.ability.allies().slice() : [];
-    pool.push(this);
     let best: Enemy | null = null;
     let bestRatio = 1;
     for (const e of pool) {
@@ -184,7 +183,6 @@ export class CommanderEnemy extends Enemy {
   // Each impact applies a flat +DEF buff to that specific target.
   private broadcastBuff(): void {
     const targets: Enemy[] = this.ability ? this.ability.allies().slice() : [];
-    targets.push(this);
     targets.forEach((ally, i) => {
       this.scene.time.delayedCall(i * BUFF_BROADCAST_STAGGER_MS, () => {
         if (!this.alive || !ally.alive) return;

@@ -133,7 +133,7 @@ export interface AuraSkillData {
   global?: boolean;
 }
 
-export type BuffResource = "hp" | "mp" | "sta";
+export type BuffResource = "hp" | "mp" | "sta" | "focus" | "nimble";
 
 export interface SkillStatMod {
   stat: StatKey;
@@ -226,6 +226,7 @@ export interface SkillCaster {
     atk: number;
   }): void;
   applyTimedSelfBuff?(mods: SkillStatMod[], durationMs: number): void;
+  applyTimedBuff?(resource: string, durationMs: number): void;
   grantNextAttackBonus?(amount: number, durationMs: number): void;
 }
 
