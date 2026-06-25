@@ -111,11 +111,28 @@ src/
     CommanderEnemy.ts          — buffs nearby allies via aura
 ```
 
+## Stat + skill integration
+- Every creature owns a `StatBlock` (Attributes / Main / Sub). Enemies use
+  authored stat sheets (`mainStatMode: "authored"`); the player stays
+  attribute-derived. Gameplay reads HP/MP/STA, ATK, MS, AS, GEN from it.
+- GEN drives centralized regen (`systems/regen.ts`): +1 HP, +0.5 MP, +0.5
+  STA per second per GEN, shared by enemies and summons.
+- Enemy abilities are real skills cast through the skill framework (no
+  hardcoded ability logic): Fighter `battle_rush`, Thief `shadowstep`, Tank
+  `protect`, Caster `mana_release`, Commander `command_aura` (passive) +
+  `reinforcements` (summon). The generic `SkillCaster` lets the same skills
+  be cast by players, enemies, summons, and future NPCs.
+- Casting plays an attribute-colored ring (VIT green, MIG red, AGI yellow,
+  INT blue, INS purple, PRE gold). Buffed enemies show a bright yellow halo.
+- Jump height scales with AGI; all enemies can jump.
+
 ## Test scene contents
 - Closed single-room arena (960×540) walled on all four sides, three
   one-way platforms in the air.
-- Default enemies: tank (front), thief, caster, then commander. Spawn more
-  of any kind via the developer console.
+- Default enemies (5): tank (front), thief, fighter, caster (on a platform,
+  hops to a further platform when approached), and commander (bow user that
+  stays back, buffs allies, and summons). Spawn more of any kind via the
+  developer console.
 - Player with HP / MP / STA (rendered in that order, top-left). Faces the
   mouse cursor in any mode.
 - Three weapons (sword melee with a 3-frame swing, bow with

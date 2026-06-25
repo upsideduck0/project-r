@@ -37,6 +37,12 @@ export interface StatBlockConfig {
   // Useful for entities that should have a baseline independent of attributes.
   baseMainStats?: Partial<MainStatSet>;
   baseSubStats?: Partial<SubStatSet>;
+  // "derived" (default): main/sub come from attribute conversion plus the base
+  // values above. "authored": the base values ARE the stats (no attribute
+  // derivation); modifiers still apply. Enemies use authored mode so their
+  // hand-tuned stat sheets are exact, while the player stays derived.
+  mainStatMode?: "derived" | "authored";
+  subStatMode?: "derived" | "authored";
 }
 
 export interface StatSnapshot {
@@ -49,6 +55,8 @@ export class StatBlock {
   private baseAttributes: AttributeSet;
   private baseMain: Partial<MainStatSet>;
   private baseSub: Partial<SubStatSet>;
+  private mainMode: "derived" | "authored";
+  private subMode: "derived" | "authored";
   private modifiers: StatModifier[] = [];
 
   private dirty = true;
@@ -60,6 +68,8 @@ export class StatBlock {
     this.baseAttributes = fillAttributes(cfg.attributes);
     this.baseMain = { ...(cfg.baseMainStats ?? {}) };
     this.baseSub = { ...(cfg.baseSubStats ?? {}) };
+    this.mainMode = cfg.mainStatMode ?? "derived";
+    this.subMode = cfg.subStatMode ?? "derived";
   }
 
   // ----- Base attribute editing (e.g. spending attribute points) -----
@@ -162,11 +172,12 @@ export class StatBlock {
     for (const a of ATTRIBUTE_KEYS) attrs[a] = applyMods(a, attrs[a]);
     this.finalAttributes = attrs;
 
-    // 2. derive from attributes
-    const main = deriveMainStats(attrs);
-    const sub = deriveSubStats(attrs);
-
-    // 3. + innate flat base
+    // 2/3. base main/sub: derived (attributes + innate base) or authored
+    // (base values used verbatim).
+    const main =
+      this.mainMode === "authored" ? zeroMainStats() : deriveMainStats(attrs);
+    const sub =
+      this.subMode === "authored" ? zeroSubStats() : deriveSubStats(attrs);
     for (const k of MAIN_STAT_KEYS) main[k] += this.baseMain[k] ?? 0;
     for (const k of SUB_STAT_KEYS) sub[k] += this.baseSub[k] ?? 0;
 

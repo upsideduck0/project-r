@@ -3,8 +3,13 @@
 //
 // Each block is independent and additive: a skill that has both `aura` and
 // `buff` runs both. This is how composite skills (e.g. Holy Nova = Heal +
-// Aura) work without bespoke logic.
+// Aura, or Battle Rush = Movement + Buff) work without bespoke logic.
+//
+// The executor is actor-agnostic: it drives the generic SkillCaster, so the
+// same skill definitions are cast by the player, enemies, bosses, and summons.
 
+import { ATTRIBUTE_KEYS, AttributeKey } from "../../systems/stats/types";
+import { ATTRIBUTE_COLORS } from "../attributes/colors";
 import { computeFinalDamage, DamageContext } from "./formulas";
 import {
   AuraSkillData,
@@ -23,29 +28,57 @@ export interface SkillRuntimeContext {
   damage?: DamageContext;
 }
 
+// The attribute whose color represents this skill: explicit dominant if set,
+// otherwise the highest scaling coefficient.
+export function dominantAttribute(skill: SkillDef): AttributeKey {
+  if (skill.core.dominantAttribute) return skill.core.dominantAttribute;
+  let best: AttributeKey = "MIG";
+  let bestVal = -Infinity;
+  for (const k of ATTRIBUTE_KEYS) {
+    const v = skill.scaling[k] ?? 0;
+    if (v > bestVal) {
+      bestVal = v;
+      best = k;
+    }
+  }
+  return best;
+}
+
 export function executeSkill(
   skill: SkillDef,
   caster: SkillCaster,
   ctx: SkillRuntimeContext = {},
 ): void {
   const dmgCtx = ctx.damage ?? {};
+
+  // Attribute-identity cast visual, sized to the skill's footprint.
+  const color = ATTRIBUTE_COLORS[dominantAttribute(skill)];
+  caster.castVisual(color, castRadius(skill));
+
   if (skill.projectile) runProjectile(skill, skill.projectile, caster, dmgCtx);
   if (skill.melee) runMelee(skill, skill.melee, caster, dmgCtx);
   if (skill.dash) runDash(skill.dash, caster);
-  if (skill.aura) runAura(skill, skill.aura, caster, dmgCtx);
+  if (skill.aura) runAura(skill.aura, skill.core.id, color, caster);
   if (skill.summon) runSummon(skill.summon, caster);
   if (skill.buff) runBuff(skill.buff, caster);
   // Debuffs target enemies; needs a targeting hook that doesn't exist yet, so
   // it is intentionally a no-op until that injection point is added.
 }
 
-function aimFromCaster(caster: SkillCaster): { dx: number; dy: number } {
-  const p = caster.player();
-  const t = caster.cursor();
-  let dx = t.x - p.x;
-  let dy = t.y - p.y;
+function castRadius(skill: SkillDef): number {
+  if (skill.aura) return skill.aura.radius;
+  if (skill.melee) return skill.melee.range;
+  if (skill.dash) return 34;
+  return 26;
+}
+
+function aimDir(caster: SkillCaster): { dx: number; dy: number } {
+  const s = caster.self();
+  const t = caster.aimPoint();
+  let dx = t.x - s.x;
+  let dy = t.y - s.y;
   const len = Math.hypot(dx, dy);
-  if (len < 1) return { dx: p.facing, dy: 0 };
+  if (len < 1) return { dx: s.facing, dy: 0 };
   return { dx: dx / len, dy: dy / len };
 }
 
@@ -55,8 +88,8 @@ function runProjectile(
   caster: SkillCaster,
   dmgCtx: DamageContext,
 ): void {
-  const p = caster.player();
-  const { dx, dy } = aimFromCaster(caster);
+  const s = caster.self();
+  const { dx, dy } = aimDir(caster);
   const damage = computeFinalDamage(data.baseDamage, skill.scaling, dmgCtx);
   const range = Math.round((data.speed * data.lifetimeMs) / 1000);
   const count = Math.max(1, data.count);
@@ -69,9 +102,9 @@ function runProjectile(
     const angle = baseAngle + offset;
     const ax = Math.cos(angle);
     const ay = Math.sin(angle);
-    caster.spawnPlayerProjectile({
-      x: p.x + p.facing * 6,
-      y: p.y,
+    caster.spawnProjectile({
+      x: s.x + s.facing * 6,
+      y: s.y,
       vx: ax * data.speed,
       vy: ay * data.speed,
       damage,
@@ -107,27 +140,18 @@ function runMelee(
 }
 
 function runDash(data: DashSkillData, caster: SkillCaster): void {
-  caster.blinkPlayer(data.distance);
-  if (data.invulnMs > 0) caster.applyInvulnFor(data.invulnMs);
-  if (data.flashColor !== undefined) caster.flashPlayer(data.flashColor, 180);
+  caster.dash(data.distance, data.direction ?? "facing", data.durationMs);
+  if (data.invulnMs > 0) caster.applyInvuln(data.invulnMs);
+  if (data.flashColor !== undefined) caster.flash(data.flashColor, 180);
 }
 
 function runAura(
-  skill: SkillDef,
   data: AuraSkillData,
+  skillId: string,
+  color: number,
   caster: SkillCaster,
-  dmgCtx: DamageContext,
 ): void {
-  if (!caster.spawnAura) return;
-  caster.spawnAura({
-    radius: data.radius,
-    tickRateMs: data.tickRateMs,
-    durationMs: data.durationMs,
-    damage: data.baseDamage
-      ? computeFinalDamage(data.baseDamage, skill.scaling, dmgCtx)
-      : 0,
-    heal: data.baseHeal ?? 0,
-  });
+  caster.startAura?.(data, skillId, color);
 }
 
 function runSummon(data: SummonSkillData, caster: SkillCaster): void {
@@ -144,7 +168,7 @@ function runSummon(data: SummonSkillData, caster: SkillCaster): void {
 function runBuff(data: BuffSkillData, caster: SkillCaster): void {
   // Instant resource change (heal / mana / stamina restore).
   if (data.resource && data.durationMs === 0) {
-    if (data.resource === "hp") caster.healPlayer(data.effectStrength);
+    if (data.resource === "hp") caster.heal(data.effectStrength);
     else if (data.resource === "mp") caster.restoreMana(data.effectStrength);
     else if (data.resource === "sta") caster.restoreStamina(data.effectStrength);
   }
@@ -152,5 +176,9 @@ function runBuff(data: BuffSkillData, caster: SkillCaster): void {
   if (data.statMods && data.durationMs > 0 && caster.applyTimedSelfBuff) {
     caster.applyTimedSelfBuff(data.statMods, data.durationMs);
   }
-  if (data.flashColor !== undefined) caster.flashPlayer(data.flashColor, 200);
+  // Empower next attack (e.g. Battle Rush).
+  if (data.nextAttackBonus && caster.grantNextAttackBonus) {
+    caster.grantNextAttackBonus(data.nextAttackBonus, data.durationMs);
+  }
+  if (data.flashColor !== undefined) caster.flash(data.flashColor, 200);
 }

@@ -11,6 +11,17 @@
 import { AttributeKey, AttributeSet, StatKey } from "../../systems/stats/types";
 import { ProjectileSpawnConfig } from "../../systems/Projectiles";
 
+// Direction hints for self-relocation skills. The caster decides what each
+// means for itself (e.g. the thief's "away_from_target" teleports away from
+// the player; the commander's "to_furthest_platform" hops to a platform far
+// from the player). Unknown values are ignored.
+export type DashDirection =
+  | "facing"
+  | "toward_target"
+  | "away_from_target"
+  | "to_nearest_ally"
+  | "to_furthest_platform";
+
 // ----- Tags & rarity -----
 
 export type SkillTag =
@@ -53,6 +64,10 @@ export interface SkillCore {
   requirements: AttributeRequirements;
   tags: SkillTag[];
 
+  // Visual identity: the attribute whose color is shown on cast. Optional
+  // because the executor falls back to the highest-coefficient scaling key.
+  dominantAttribute?: AttributeKey;
+
   // Internal-only authoring/budget signal. Never shown to players; used later
   // by loot generation, AI usage, balance evaluation, reward systems.
   complexity: number;
@@ -91,6 +106,8 @@ export interface DashSkillData {
   distance: number;
   durationMs: number;
   invulnMs: number;
+  // Where the caster relocates to. Default "facing".
+  direction?: DashDirection;
   flashColor?: number;
 }
 
@@ -105,9 +122,12 @@ export interface SummonSkillData {
 export interface AuraSkillData {
   radius: number;
   tickRateMs: number;
-  durationMs: number;
+  durationMs: number; // 0 or negative = infinite (passive)
   baseDamage?: number; // for damaging auras
   baseHeal?: number; // for healing auras (e.g. Holy Nova)
+  // Different timed stat modifiers per ally kind. Used by buffing auras like
+  // command_aura where each minion type receives a tailored effect.
+  kindEffects?: Record<string, SkillStatMod[]>;
 }
 
 export type BuffResource = "hp" | "mp" | "sta";
@@ -129,6 +149,8 @@ export interface BuffSkillData {
   resource?: BuffResource;
   // Stat modifiers applied for durationMs.
   statMods?: SkillStatMod[];
+  // Empower the caster's next attack by this much for durationMs.
+  nextAttackBonus?: number;
   flashColor?: number;
 }
 
@@ -150,29 +172,41 @@ export interface SkillDef {
 
 // ----- Caster surface -----
 //
-// The executor performs effects through this interface, so it stays decoupled
-// from the scene. Optional hooks let future type-data blocks (melee / aura /
-// summon / timed buffs) light up without touching the executor — if a hook is
-// absent that effect is simply a no-op for now.
+// A generic, actor-relative surface so the SAME skills work for the player,
+// enemies, bosses, summons, and future NPCs. The executor performs effects
+// through this interface and never knows who is casting. The implementing
+// actor decides what "self" / "aim" / a dash direction mean for it.
+//
+// Optional hooks let advanced type-data blocks (melee / aura / summon / timed
+// buffs) light up per-actor; if a hook is absent that effect is a no-op.
 
-export interface PlayerHandle {
+export interface CasterSelf {
   x: number;
   y: number;
   facing: 1 | -1;
 }
 
 export interface SkillCaster {
-  player(): PlayerHandle;
-  cursor(): { x: number; y: number };
-  healPlayer(amount: number): void;
+  // Who is casting and where they are aiming.
+  self(): CasterSelf;
+  aimPoint(): { x: number; y: number };
+
+  // Resource changes on the caster.
+  heal(amount: number): void;
   restoreMana(amount: number): void;
   restoreStamina(amount: number): void;
-  blinkPlayer(distancePx: number): void;
-  applyInvulnFor(ms: number): void;
-  spawnPlayerProjectile(cfg: ProjectileSpawnConfig): void;
-  flashPlayer(color: number, ms: number): void;
 
-  // Future injection points (optional):
+  // Combat + movement.
+  spawnProjectile(cfg: ProjectileSpawnConfig): void;
+  dash(distance: number, direction: DashDirection, durationMs: number): void;
+  applyInvuln(ms: number): void;
+
+  // Feedback. flash tints the caster; castVisual plays the attribute-identity
+  // effect on the skill area.
+  flash(color: number, ms: number): void;
+  castVisual(color: number, radius: number): void;
+
+  // Optional advanced effects:
   spawnMeleeHitbox?(opts: {
     damage: number;
     range: number;
@@ -180,13 +214,7 @@ export interface SkillCaster {
     hitCount: number;
     knockback: number;
   }): void;
-  spawnAura?(opts: {
-    radius: number;
-    tickRateMs: number;
-    durationMs: number;
-    damage: number;
-    heal: number;
-  }): void;
+  startAura?(aura: AuraSkillData, skillId: string, color: number): void;
   spawnSummon?(opts: {
     summonType: string;
     durationMs: number;
@@ -195,6 +223,7 @@ export interface SkillCaster {
     atk: number;
   }): void;
   applyTimedSelfBuff?(mods: SkillStatMod[], durationMs: number): void;
+  grantNextAttackBonus?(amount: number, durationMs: number): void;
 }
 
 export type { AttributeSet };

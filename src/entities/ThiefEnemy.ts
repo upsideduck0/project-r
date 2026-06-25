@@ -1,32 +1,29 @@
 import Phaser from "phaser";
 import { Enemy, PlayerView } from "./Enemy";
+import { SKILLS } from "../data/skills";
 
-const THIEF_SPEED = 210;
-const DART_INTERVAL_MS = 1100;
-const DART_DISTANCE = 130;
+const PANIC_RANGE = 90; // teleport away when the player gets this close
+const HARASS_RANGE = 150;
 
 export class ThiefEnemy extends Enemy {
-  private dartTargetX: number;
-  private nextDartAt = 0;
-  private preferLeft = true;
-
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, {
       textureKey: "px-thief",
       kind: "thief",
-      maxHp: 32,
       aggroRadius: 360,
-      contactDamage: 7,
       bodyW: 14,
       bodyH: 24,
       bodyOffX: 1,
       bodyOffY: 2,
       hpBarWidth: 28,
       respawnMs: 3500,
-      attackCooldownMs: 650,
-      attributes: { VIT: 4, MIG: 6, AGI: 18, INT: 4, INS: 7, PRE: 3 },
+      attributes: { VIT: 4, MIG: 6, AGI: 18, INT: 0, INS: 0, PRE: 0 },
+      mainStats: {
+        HP: 50, MP: 20, STA: 54, ATK: 12, DEF: 6, MS: 9, AS: 7.2, TEN: 0,
+      },
+      subStats: { GEN: 5 },
     });
-    this.dartTargetX = x;
+    this.addSkill(SKILLS.shadowstep);
   }
 
   protected tick(now: number, _dt: number, player: PlayerView): void {
@@ -36,31 +33,31 @@ export class ThiefEnemy extends Enemy {
       body.setVelocityX(0);
       return;
     }
+
     const dist = this.distanceTo(player);
     if (dist >= this.aggroRadius && this.state !== "aggro") {
-      body.setVelocityX(0);
       this.state = "idle";
+      body.setVelocityX(0);
       return;
     }
     this.state = "aggro";
 
-    if (now >= this.nextDartAt) {
-      this.nextDartAt = now + DART_INTERVAL_MS;
-      // Cross to the opposite side of the player each dart, so the thief
-      // keeps swapping sides and is hard to track.
-      this.preferLeft = !this.preferLeft;
-      const side = this.preferLeft ? -1 : 1;
-      this.dartTargetX = player.x + side * DART_DISTANCE;
+    // Shadowstep: bail when the player is right on top of us.
+    if (dist < PANIC_RANGE && this.castSkill(SKILLS.shadowstep, now)) {
+      return;
     }
 
-    const speed = THIEF_SPEED * this.getMoveSpeedMult();
-    const dx = this.dartTargetX - this.sprite.x;
-    if (Math.abs(dx) < 4) {
-      body.setVelocityX(0);
+    const speed = this.moveSpeedPx();
+    if (dist < HARASS_RANGE) {
+      // Keep harassing distance — sidestep away a bit.
+      const dir = player.x < this.sprite.x ? 1 : -1;
+      body.setVelocityX(speed * 0.6 * dir);
+      this.sprite.setFlipX(player.x < this.sprite.x);
     } else {
-      const dir = dx < 0 ? -1 : 1;
+      const dir = player.x < this.sprite.x ? -1 : 1;
       body.setVelocityX(speed * dir);
       this.sprite.setFlipX(dir === -1);
+      if (player.y < this.sprite.y - 40) this.tryJump();
     }
   }
 }

@@ -1,7 +1,8 @@
 import Phaser from "phaser";
 import { Enemy, PlayerView } from "./Enemy";
+import { SKILLS } from "../data/skills";
 
-const FIGHTER_SPEED = 140;
+const MELEE_RANGE = 60;
 const LEASH = 360;
 
 export class FighterEnemy extends Enemy {
@@ -9,40 +10,47 @@ export class FighterEnemy extends Enemy {
     super(scene, x, y, {
       textureKey: "px-fighter",
       kind: "fighter",
-      maxHp: 80,
-      aggroRadius: 280,
-      contactDamage: 12,
+      aggroRadius: 300,
       bodyW: 20,
       bodyH: 30,
       bodyOffX: 2,
       bodyOffY: 2,
       hpBarWidth: 38,
       respawnMs: 3500,
-      attackCooldownMs: 850,
-      attributes: { VIT: 8, MIG: 11, AGI: 8, INT: 3, INS: 3, PRE: 3 },
+      attributes: { VIT: 8, MIG: 14, AGI: 8, INT: 0, INS: 0, PRE: 0 },
+      mainStats: {
+        HP: 100, MP: 30, STA: 24, ATK: 18, DEF: 12, MS: 4, AS: 3, TEN: 6,
+      },
+      subStats: { GEN: 3 },
     });
+    this.addSkill(SKILLS.battle_rush);
   }
 
-  protected tick(_now: number, _dt: number, player: PlayerView): void {
+  protected tick(now: number, _dt: number, player: PlayerView): void {
     if (this.state === "hurt") return;
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     if (!player.alive) {
       body.setVelocityX(0);
       return;
     }
+
     const dist = this.distanceTo(player);
-    const speed = FIGHTER_SPEED * this.getMoveSpeedMult();
-    if (
-      dist < this.aggroRadius ||
-      (this.state === "aggro" && dist < LEASH)
-    ) {
-      this.state = "aggro";
-      const dir = player.x < this.sprite.x ? -1 : 1;
-      body.setVelocityX(speed * dir);
-      this.sprite.setFlipX(dir === -1);
-    } else {
+    const aggro = dist < this.aggroRadius || (this.state === "aggro" && dist < LEASH);
+    if (!aggro) {
       this.state = "idle";
       body.setVelocityX(0);
+      return;
     }
+    this.state = "aggro";
+
+    // Battle Rush: close the gap and empower the next hit when out of reach.
+    if (dist > MELEE_RANGE && this.castSkill(SKILLS.battle_rush, now)) {
+      return;
+    }
+
+    const dir = player.x < this.sprite.x ? -1 : 1;
+    body.setVelocityX(this.moveSpeedPx() * dir);
+    this.sprite.setFlipX(dir === -1);
+    if (player.y < this.sprite.y - 40) this.tryJump();
   }
 }

@@ -1,42 +1,22 @@
 import Phaser from "phaser";
-import { BuffMods, Enemy, PlayerView } from "./Enemy";
+import { Enemy, PlayerView } from "./Enemy";
+import { SKILLS } from "../data/skills";
 
-const COMMANDER_SPEED = 60;
-const KITE_TRIGGER_DISTANCE = 180;
+const KITE_DISTANCE = 260; // stays back behind the frontline
+const BOW_RANGE = 520;
+const ARROW_SPEED = 460;
 
-let commanderCounter = 0;
-
-export const DEFAULT_AURA_BUFFS: Record<string, BuffMods> = {
-  tank: { damageReduction: 0.5 },
-  fighter: { attackSpeedMult: 1.8 },
-  thief: { moveSpeedMult: 1.5 },
-};
-
-export interface CommanderOptions {
-  auraBuffs?: Record<string, BuffMods>;
-}
-
+// Commander: a bow user that hangs behind its allies. Its abilities are real
+// skills — command_aura (passive buff field) and reinforcements (relocate +
+// summon a fighter). All buff bookkeeping lives in the Enemy base.
 export class CommanderEnemy extends Enemy {
-  // Injected by the scene. Should return every other enemy in the world
-  // (this commander filters itself out).
-  getEnemies?: () => Enemy[];
-  auraBuffs: Record<string, BuffMods>;
-  private commanderId: string;
-  private buffedEnemies = new Set<Enemy>();
-  private nextAuraCheckAt = 0;
+  private nextBowAt = 0;
 
-  constructor(
-    scene: Phaser.Scene,
-    x: number,
-    y: number,
-    opts: CommanderOptions = {},
-  ) {
+  constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, {
       textureKey: "px-commander",
       kind: "commander",
-      maxHp: 500,
-      aggroRadius: 480,
-      contactDamage: 10,
+      aggroRadius: 560,
       bodyW: 22,
       bodyH: 32,
       bodyOffX: 2,
@@ -44,71 +24,80 @@ export class CommanderEnemy extends Enemy {
       knockbackResist: 0.4,
       hpBarWidth: 60,
       respawnMs: 8000,
-      attackCooldownMs: 1400,
       attributes: { VIT: 10, MIG: 6, AGI: 6, INT: 8, INS: 8, PRE: 18 },
+      mainStats: {
+        HP: 200, MP: 100, STA: 18, ATK: 12, DEF: 30, MS: 3, AS: 2.4, TEN: 10,
+      },
+      subStats: { GEN: 10 },
     });
-    this.commanderId = `commander-${++commanderCounter}`;
-    this.auraBuffs = opts.auraBuffs ?? DEFAULT_AURA_BUFFS;
-  }
-
-  setAuraBuffs(buffs: Record<string, BuffMods>): void {
-    this.auraBuffs = buffs;
-    // Force a refresh on the next tick.
-    this.nextAuraCheckAt = 0;
-    for (const e of this.buffedEnemies) e.removeBuff(this.commanderId);
-    this.buffedEnemies.clear();
+    this.addSkill(SKILLS.command_aura);
+    this.addSkill(SKILLS.reinforcements);
   }
 
   protected tick(now: number, _dt: number, player: PlayerView): void {
+    if (this.state === "hurt") return;
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
-    if (this.state !== "hurt") {
-      if (player.alive && this.distanceTo(player) < KITE_TRIGGER_DISTANCE) {
-        // Back away from the player; the commander wants to stay behind
-        // its buffed minions.
-        const dir = player.x < this.sprite.x ? 1 : -1;
-        body.setVelocityX(COMMANDER_SPEED * this.getMoveSpeedMult() * dir);
-        this.sprite.setFlipX(dir === 1);
-      } else {
-        body.setVelocityX(0);
-      }
+
+    // Passive: keep the command aura up at all times.
+    if (!this.hasAura("command_aura")) this.castSkill(SKILLS.command_aura, now);
+
+    if (!player.alive) {
+      body.setVelocityX(0);
+      return;
     }
 
-    if (now >= this.nextAuraCheckAt) {
-      this.nextAuraCheckAt = now + 150;
-      this.refreshAura();
+    // Active: reinforcements when mana allows. The skill relocates to the
+    // furthest platform (creating distance) and then summons a fighter.
+    if (this.canCast(SKILLS.reinforcements, now)) {
+      this.castSkill(SKILLS.reinforcements, now);
+      return;
+    }
+
+    // Stay back; prefer ranged. Back away if the player gets close.
+    const dist = this.distanceTo(player);
+    const speed = this.moveSpeedPx();
+    if (dist < KITE_DISTANCE) {
+      const dirAway = player.x < this.sprite.x ? 1 : -1;
+      body.setVelocityX(speed * dirAway);
+      this.sprite.setFlipX(player.x < this.sprite.x);
+    } else {
+      body.setVelocityX(0);
+      this.sprite.setFlipX(player.x < this.sprite.x);
+    }
+
+    // Bow shot.
+    if (dist < BOW_RANGE && now >= this.nextBowAt && this.ability) {
+      this.nextBowAt = now + this.attackIntervalMs();
+      this.fireBow(player);
     }
   }
 
-  // Buff range is the whole map for now: every living enemy of a buffable
-  // kind receives the matching buff, regardless of distance.
-  private refreshAura(): void {
-    if (!this.getEnemies) return;
-    const targets = new Set<Enemy>();
-    for (const e of this.getEnemies()) {
-      if (e === this || !e.alive) continue;
-      if (this.auraBuffs[e.kind]) targets.add(e);
-    }
-    for (const e of targets) {
-      if (this.buffedEnemies.has(e)) continue;
-      e.applyBuff(this.commanderId, this.auraBuffs[e.kind]);
-      this.buffedEnemies.add(e);
-    }
-    for (const e of this.buffedEnemies) {
-      if (!targets.has(e)) {
-        e.removeBuff(this.commanderId);
-        this.buffedEnemies.delete(e);
-      }
-    }
-  }
-
-  protected onDeath(): void {
-    for (const e of this.buffedEnemies) e.removeBuff(this.commanderId);
-    this.buffedEnemies.clear();
-    super.onDeath();
-  }
-
-  respawn(): void {
-    super.respawn();
-    this.nextAuraCheckAt = 0;
+  private fireBow(player: PlayerView): void {
+    const dirSign = player.x < this.sprite.x ? -1 : 1;
+    const ox = this.sprite.x + dirSign * 10;
+    const oy = this.sprite.y - 4;
+    let dx = player.x - ox;
+    let dy = player.y - oy - 24;
+    const len = Math.hypot(dx, dy) || 1;
+    dx /= len;
+    dy /= len;
+    this.ability!.spawnProjectile({
+      x: ox,
+      y: oy,
+      vx: dx * ARROW_SPEED,
+      vy: dy * ARROW_SPEED,
+      damage: this.atk,
+      texture: "proj-arrow",
+      range: 640,
+      rotation: Math.atan2(dy, dx),
+      knockX: 80,
+      knockY: -40,
+      homingTurnRate: 0,
+      gravityAfterMs: 260,
+      piercing: false,
+      glowTint: 0,
+      glowFrequencyMs: 0,
+      glowLifespanMs: 0,
+    });
   }
 }

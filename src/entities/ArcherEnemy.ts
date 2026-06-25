@@ -1,33 +1,29 @@
 import Phaser from "phaser";
 import { Enemy, PlayerView } from "./Enemy";
-import { ProjectileSpawnConfig } from "../systems/Projectiles";
 
-// Archer: a physical ranged enemy. Where the caster lobs straight magic
-// bolts, the archer fires arrows that travel fast then arc downward (gravity
-// after a short delay), so it leads and rains shots from a longer range.
-const FIRE_COOLDOWN_MS = 1300;
+// Archer: a physical ranged enemy. Where the caster lobs magic orbs, the
+// archer fires arrows that travel fast then arc downward (gravity after a
+// short delay), kiting at range. Fires via the injected ability context.
 const PREFERRED_DISTANCE = 330;
-const KITE_SPEED = 60;
 const ARROW_SPEED = 480;
 
 export class ArcherEnemy extends Enemy {
-  fireProjectile?: (cfg: ProjectileSpawnConfig) => void;
-
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, {
       textureKey: "px-archer",
       kind: "archer",
-      maxHp: 50,
       aggroRadius: 440,
-      contactDamage: 6,
       bodyW: 18,
       bodyH: 28,
       bodyOffX: 2,
       bodyOffY: 2,
       hpBarWidth: 34,
       respawnMs: 4000,
-      attackCooldownMs: FIRE_COOLDOWN_MS,
       attributes: { VIT: 5, MIG: 7, AGI: 12, INT: 6, INS: 8, PRE: 3 },
+      mainStats: {
+        HP: 50, MP: 30, STA: 20, ATK: 9, DEF: 4, MS: 1.7, AS: 2, TEN: 0,
+      },
+      subStats: { GEN: 2 },
     });
   }
 
@@ -50,17 +46,13 @@ export class ArcherEnemy extends Enemy {
     const dirSign: 1 | -1 = player.x < this.sprite.x ? -1 : 1;
     this.sprite.setFlipX(dirSign === -1);
 
-    const speed = KITE_SPEED * this.getMoveSpeedMult();
-    if (dist < PREFERRED_DISTANCE - 40) {
-      body.setVelocityX(-dirSign * speed);
-    } else if (dist > PREFERRED_DISTANCE + 40) {
-      body.setVelocityX(dirSign * speed);
-    } else {
-      body.setVelocityX(0);
-    }
+    const speed = this.moveSpeedPx();
+    if (dist < PREFERRED_DISTANCE - 40) body.setVelocityX(-dirSign * speed);
+    else if (dist > PREFERRED_DISTANCE + 40) body.setVelocityX(dirSign * speed);
+    else body.setVelocityX(0);
 
     const dmg = this.tryAttackPlayer(now);
-    if (dmg !== null && this.fireProjectile) {
+    if (dmg !== null && this.ability) {
       const ox = this.sprite.x + dirSign * 10;
       const oy = this.sprite.y - 4;
       let dx = player.x - ox;
@@ -68,12 +60,12 @@ export class ArcherEnemy extends Enemy {
       const len = Math.hypot(dx, dy) || 1;
       dx /= len;
       dy /= len;
-      this.fireProjectile({
+      this.ability.spawnProjectile({
         x: ox,
         y: oy,
         vx: dx * ARROW_SPEED,
         vy: dy * ARROW_SPEED,
-        damage: 9,
+        damage: dmg,
         texture: "proj-arrow",
         range: 620,
         rotation: Math.atan2(dy, dx),

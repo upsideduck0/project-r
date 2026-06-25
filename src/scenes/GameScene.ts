@@ -14,7 +14,7 @@ import {
   meetsRequirements,
 } from "../data/skills";
 import { HotbarUI, HotbarSlotDisplay } from "../ui/HotbarUI";
-import { Enemy } from "../entities/Enemy";
+import { Enemy, EnemyAbilityContext } from "../entities/Enemy";
 import { Dummy } from "../entities/Dummy";
 import { MeleeChaser } from "../entities/MeleeChaser";
 import { RangedEnemy } from "../entities/RangedEnemy";
@@ -398,21 +398,12 @@ export class GameScene extends Phaser.Scene {
       case "thief":
         return new ThiefEnemy(this, x, y);
       case "caster":
-      case "ranged": {
-        const r = new RangedEnemy(this, x, y);
-        r.fireProjectile = (cfg) => this.enemyProjectiles.spawn(cfg);
-        return r;
-      }
-      case "archer": {
-        const a = new ArcherEnemy(this, x, y);
-        a.fireProjectile = (cfg) => this.enemyProjectiles.spawn(cfg);
-        return a;
-      }
-      case "commander": {
-        const c = new CommanderEnemy(this, x, y);
-        c.getEnemies = () => this.enemyEntities;
-        return c;
-      }
+      case "ranged":
+        return new RangedEnemy(this, x, y);
+      case "archer":
+        return new ArcherEnemy(this, x, y);
+      case "commander":
+        return new CommanderEnemy(this, x, y);
       default:
         return null;
     }
@@ -421,20 +412,59 @@ export class GameScene extends Phaser.Scene {
   private registerEnemy(e: Enemy): void {
     this.enemyEntities.push(e);
     this.enemies.add(e.sprite);
+    e.setAbilityContext(this.buildEnemyAbilityContext(e));
+  }
+
+  // Grants an enemy the world capabilities its skills need. Generic — every
+  // enemy gets the same surface; the enemy decides what to do with it.
+  private buildEnemyAbilityContext(self: Enemy): EnemyAbilityContext {
+    return {
+      target: () => ({
+        x: this.player.x,
+        y: this.player.y,
+        facing: this.player.facing,
+        alive: this.player.active,
+      }),
+      allies: () => this.enemyEntities.filter((e) => e !== self && e.alive),
+      platformTops: () => this.platformTops(),
+      worldMinX: 24,
+      worldMaxX: WORLD_WIDTH - 24,
+      spawnProjectile: (cfg) => this.enemyProjectiles.spawn(cfg),
+      summon: (kind, sx, sy) => {
+        const e = this.createEnemyByKind(kind, sx, sy);
+        if (e) this.registerEnemy(e);
+        return e;
+      },
+    };
+  }
+
+  private platformTops(): { x: number; y: number }[] {
+    const tops: { x: number; y: number }[] = [];
+    this.oneWayPlatforms.children.iterate((obj) => {
+      const p = obj as OneWayPlatform;
+      tops.push({ x: p.x, y: p.y - p.displayHeight / 2 - 20 });
+      return true;
+    });
+    return tops;
   }
 
   private spawnEnemies(): void {
-    // Default test room: tank (front), thief, caster, then commander.
-    const layout: Array<[string, number]> = [
+    // Default test room: tank (front), thief, fighter, caster (on a platform),
+    // commander — five enemies.
+    const tops = this.platformTops();
+    const casterPlat = tops.length > 0 ? tops[tops.length - 1] : { x: 740, y: 340 };
+    const ground: Array<[string, number]> = [
       ["tank", 280],
       ["thief", 470],
-      ["caster", 650],
-      ["commander", 830],
+      ["fighter", 650],
+      ["commander", 850],
     ];
-    for (const [kind, x] of layout) {
+    for (const [kind, x] of ground) {
       const e = this.createEnemyByKind(kind, x, GROUND_Y - 60);
       if (e) this.registerEnemy(e);
     }
+    const caster = this.createEnemyByKind("caster", casterPlat.x, casterPlat.y);
+    if (caster) this.registerEnemy(caster);
   }
 
   // -------- Player movement --------
@@ -917,12 +947,12 @@ export class GameScene extends Phaser.Scene {
 
   private buildSkillCaster(): SkillCaster {
     return {
-      player: () => ({ x: this.player.x, y: this.player.y, facing: this.player.facing }),
-      cursor: () => ({
+      self: () => ({ x: this.player.x, y: this.player.y, facing: this.player.facing }),
+      aimPoint: () => ({
         x: this.input.activePointer.worldX,
         y: this.input.activePointer.worldY,
       }),
-      healPlayer: (amount) => {
+      heal: (amount) => {
         this.player.hp = Math.min(PLAYER_MAX_HP, this.player.hp + amount);
       },
       restoreMana: (amount) => {
@@ -931,23 +961,41 @@ export class GameScene extends Phaser.Scene {
       restoreStamina: (amount) => {
         this.player.stamina = Math.min(MAX_STAMINA, this.player.stamina + amount);
       },
-      blinkPlayer: (distance) => {
+      spawnProjectile: (cfg) => this.playerProjectiles.spawn(cfg),
+      // Player only relocates in its facing direction (Blink).
+      dash: (distance) => {
         const dx = this.player.facing * distance;
         const target = Phaser.Math.Clamp(this.player.x + dx, 16, WORLD_WIDTH - 16);
         this.player.setX(target);
         this.spawnDashTrail();
       },
-      applyInvulnFor: (ms) => {
+      applyInvuln: (ms) => {
         this.player.invulnUntil = Math.max(this.player.invulnUntil, this.time.now + ms);
       },
-      spawnPlayerProjectile: (cfg) => this.playerProjectiles.spawn(cfg),
-      flashPlayer: (color, ms) => this.flashPlayer(color, ms),
+      flash: (color, ms) => this.flashPlayer(color, ms),
+      castVisual: (color, radius) => this.spawnCastVisual(this.player.x, this.player.y, color, radius),
     };
   }
 
   private flashPlayer(color: number, ms: number): void {
     this.player.setTint(color);
     this.time.delayedCall(ms, () => this.player.clearTint());
+  }
+
+  // Attribute-identity flourish on cast: an expanding colored ring.
+  private spawnCastVisual(x: number, y: number, color: number, radius: number): void {
+    const ring = this.add
+      .circle(x, y, Math.max(12, radius * 0.4), color, 0.3)
+      .setStrokeStyle(3, color, 0.9)
+      .setDepth(this.player.depth + 2);
+    this.tweens.add({
+      targets: ring,
+      radius: Math.max(18, radius),
+      alpha: 0,
+      duration: 300,
+      ease: "Cubic.easeOut",
+      onComplete: () => ring.destroy(),
+    });
   }
 
   // -------- Inventory seeding --------
