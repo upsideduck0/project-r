@@ -14,6 +14,7 @@ const HEAL_FRACTION = 0.5; // heals 50% of the target's max HP
 const BUFF_DEF_AMOUNT = 100; // flat DEF buff granted to every ally
 const BUFF_BROADCAST_DELAY_MS = 600;
 const BUFF_BROADCAST_STAGGER_MS = 180;
+const PLATFORM_HOP_INTERVAL_MS = 5000; // evasion: relocate to a different platform
 
 // Commander: a musket user that hangs behind its allies. On engagement it
 // broadcasts a flat DEF buff to every ally (and itself) via a green-dot drop
@@ -24,6 +25,7 @@ export class CommanderEnemy extends Enemy {
   private nextHealAt = 0;
   private buffBroadcastAt: number | null = null;
   private buffsBroadcast = false;
+  private nextPlatformHopAt = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, {
@@ -83,7 +85,16 @@ export class CommanderEnemy extends Enemy {
     // furthest platform (creating distance) and then summons a fighter.
     if (this.canCast(SKILLS.reinforcements, now)) {
       this.castSkill(SKILLS.reinforcements, now);
+      this.nextPlatformHopAt = now + PLATFORM_HOP_INTERVAL_MS;
       return;
+    }
+
+    // Periodic evasion: relocate to a different platform every ~5s.
+    if (this.nextPlatformHopAt === 0) {
+      this.nextPlatformHopAt = now + PLATFORM_HOP_INTERVAL_MS;
+    } else if (now >= this.nextPlatformHopAt) {
+      this.nextPlatformHopAt = now + PLATFORM_HOP_INTERVAL_MS;
+      this.hopToEvasionPlatform(player);
     }
 
     // Stay back; prefer ranged. Back away if the player gets close.
@@ -102,6 +113,56 @@ export class CommanderEnemy extends Enemy {
     if (dist < BOW_RANGE && now >= this.nextBowAt && this.ability) {
       this.nextBowAt = now + 3000;
       this.fireBow(player);
+    }
+  }
+
+  // Picks a platform far from the player (and different from the one we are
+  // currently standing on) and relocates there with a brief puff visual.
+  private hopToEvasionPlatform(player: PlayerView): void {
+    if (!this.ability) return;
+    const tops = this.ability.platformTops();
+    if (tops.length === 0) return;
+    let best: { x: number; y: number } | null = null;
+    let bestScore = -Infinity;
+    for (const p of tops) {
+      const onThis =
+        Math.abs(p.x - this.sprite.x) < 40 && Math.abs(p.y - this.sprite.y) < 40;
+      if (onThis) continue;
+      const score = Math.abs(p.x - player.x);
+      if (score > bestScore) {
+        bestScore = score;
+        best = p;
+      }
+    }
+    if (!best) return;
+    this.spawnHopVisual(this.sprite.x, this.sprite.y);
+    this.sprite.setPosition(best.x, best.y);
+    (this.sprite.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
+    this.spawnHopVisual(best.x, best.y);
+  }
+
+  private spawnHopVisual(x: number, y: number): void {
+    const ring = this.scene.add
+      .circle(x, y, 16, 0x506fff, 0.35)
+      .setStrokeStyle(2, 0xa0b0ff, 0.85)
+      .setDepth(this.sprite.depth + 1);
+    this.scene.tweens.add({
+      targets: ring,
+      radius: 30,
+      alpha: 0,
+      duration: 260,
+      ease: "Cubic.easeOut",
+      onComplete: () => ring.destroy(),
+    });
+  }
+
+  // On death, immediately strip the DEF buff this commander granted from
+  // every ally so the buff cannot outlive its source.
+  protected onDeath(): void {
+    if (!this.ability) return;
+    const sourceId = `commander_buff:${this.id}`;
+    for (const ally of this.ability.allies()) {
+      ally.removeStatBuff(sourceId);
     }
   }
 
