@@ -12,6 +12,11 @@ import { Enemy } from "../entities/Enemy";
 import { Dummy } from "../entities/Dummy";
 import { MeleeChaser } from "../entities/MeleeChaser";
 import { RangedEnemy } from "../entities/RangedEnemy";
+import { TankEnemy } from "../entities/TankEnemy";
+import { FighterEnemy } from "../entities/FighterEnemy";
+import { ThiefEnemy } from "../entities/ThiefEnemy";
+import { CommanderEnemy } from "../entities/CommanderEnemy";
+import { DevConsole } from "../ui/DevConsole";
 
 const WORLD_WIDTH = 960;
 const WORLD_HEIGHT = 540;
@@ -33,7 +38,6 @@ const STAMINA_REGEN_PER_SEC = 35;
 const MAX_MANA = 100;
 const MANA_REGEN_PER_SEC = 10;
 
-const TOUCH_COOLDOWN_MS = 800;
 const HP_POTION_HEAL = 30;
 const MP_POTION_RESTORE = 30;
 
@@ -90,6 +94,7 @@ export class GameScene extends Phaser.Scene {
   private weaponVisual!: Phaser.GameObjects.Image;
 
   private combatMode = false;
+  private devConsole!: DevConsole;
 
   constructor() {
     super("GameScene");
@@ -100,6 +105,10 @@ export class GameScene extends Phaser.Scene {
     this.makePixelTexture("px-dummy", 22, 30, 0xb89070, 0x5a4530);
     this.makePixelTexture("px-chaser", 20, 28, 0xe05050, 0x5a2020);
     this.makePixelTexture("px-ranged", 18, 28, 0x9070ff, 0x3a2580);
+    this.makePixelTexture("px-tank", 28, 36, 0x707080, 0x202028);
+    this.makePixelTexture("px-fighter", 22, 32, 0xe0a040, 0x603a10);
+    this.makePixelTexture("px-thief", 16, 26, 0x60d090, 0x205040);
+    this.makePixelTexture("px-commander", 24, 34, 0x506fff, 0x18255a);
     this.makePixelTexture("px-ground", 64, 16, 0x3a3f55, 0x1c1f2b);
     this.makePixelTexture("px-wall", 16, 64, 0x3a3f55, 0x1c1f2b);
     this.makePixelTexture("px-platform", 96, 12, 0x4a5072, 0x252a3d);
@@ -151,6 +160,20 @@ export class GameScene extends Phaser.Scene {
     );
 
     this.setWeapon("wooden_sword");
+
+    this.devConsole = new DevConsole();
+    this.registerDevCommands();
+    const kb = this.input.keyboard!;
+    this.devConsole.onOpen = () => {
+      kb.enabled = false;
+      kb.resetKeys();
+    };
+    this.devConsole.onClose = () => {
+      kb.enabled = true;
+    };
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.devConsole.destroy();
+    });
   }
 
   update(_time: number, delta: number): void {
@@ -651,6 +674,79 @@ export class GameScene extends Phaser.Scene {
       : { text: "Utility bar (exploration)", color: "#6fd3ff" };
   }
 
+  // -------- Dev console commands --------
+
+  private registerDevCommands(): void {
+    this.devConsole.register("spawn", (args) => this.cmdSpawn(args));
+    this.devConsole.register("give", (args) => this.cmdGive(args));
+    this.devConsole.register("fh", () => this.cmdFullHeal());
+  }
+
+  private cmdSpawn(args: string[]): string {
+    const kind = (args[0] ?? "").toLowerCase();
+    if (!kind) return "[DEV] usage: /spawn <tank|fighter|thief|commander>";
+    const px = Phaser.Math.Clamp(
+      this.player.x + this.player.facing * 90,
+      40,
+      WORLD_WIDTH - 40,
+    );
+    const py = GROUND_Y - 60;
+    let enemy: Enemy;
+    switch (kind) {
+      case "tank":
+        enemy = new TankEnemy(this, px, py);
+        break;
+      case "fighter":
+        enemy = new FighterEnemy(this, px, py);
+        break;
+      case "thief":
+        enemy = new ThiefEnemy(this, px, py);
+        break;
+      case "commander": {
+        const c = new CommanderEnemy(this, px, py);
+        c.getEnemies = () => this.enemyEntities;
+        enemy = c;
+        break;
+      }
+      default:
+        return `[DEV] unknown enemy: ${kind} (try tank|fighter|thief|commander)`;
+    }
+    this.enemyEntities.push(enemy);
+    this.enemies.add(enemy.sprite);
+    return `[DEV] spawned ${kind} at (${Math.round(px)}, ${Math.round(py)})`;
+  }
+
+  private cmdGive(args: string[]): string {
+    const id = args[0];
+    if (!id) return "[DEV] usage: /give <itemId>";
+    if (SKILLS[id]) {
+      const slot = this.findFreeSkillSlot();
+      this.inventory.setSkill(slot, { skillId: id });
+      return `[DEV] bound skill '${id}' to slot ${slot + 1}`;
+    }
+    if (ITEMS[id]) {
+      const def = ITEMS[id];
+      const leftover = this.inventory.addItem("utility", id, 1, def.maxStack);
+      if (leftover > 0) return `[DEV] no room for ${id} (utility bar full)`;
+      return `[DEV] added ${id} to utility bar`;
+    }
+    return `[DEV] unknown item or skill: ${id}`;
+  }
+
+  private cmdFullHeal(): string {
+    this.player.hp = PLAYER_MAX_HP;
+    this.player.mana = MAX_MANA;
+    this.player.stamina = MAX_STAMINA;
+    return "[DEV] HP, MP, and STA restored.";
+  }
+
+  private findFreeSkillSlot(): number {
+    for (let i = 0; i < this.inventory.skill.length; i++) {
+      if (!this.inventory.skill[i]) return i;
+    }
+    return 0;
+  }
+
   // -------- Damage handlers --------
 
   private onMeleeHit(enemySprite: Phaser.Physics.Arcade.Sprite): void {
@@ -702,9 +798,9 @@ export class GameScene extends Phaser.Scene {
   private onPlayerTouchEnemy(enemySprite: Phaser.Physics.Arcade.Sprite): void {
     const enemy = enemySprite.getData("enemy") as Enemy | undefined;
     if (!enemy || !enemy.alive) return;
-    const now = this.time.now;
-    if (now - this.player.lastHurtAt < TOUCH_COOLDOWN_MS) return;
-    this.damagePlayer(enemy.contactDamage);
+    const dmg = enemy.tryAttackPlayer(this.time.now);
+    if (dmg === null) return;
+    this.damagePlayer(dmg);
     const dir = this.player.x < enemy.sprite.x ? -1 : 1;
     (this.player.body as Phaser.Physics.Arcade.Body).setVelocity(dir * 220, -220);
   }
