@@ -67,11 +67,13 @@ export interface EnemyAbilityContext {
 
 const KNOCKBACK_MS = 200;
 // Stat-unit -> pixel conversions (centralized so tuning is one place).
-const MS_TO_PX = 350; // movement: pixels/sec per MS point (MS = 0.05×AGI, so 350 keeps speeds sane)
+const MS_TO_PX = 350; // movement: pixels/sec per MS point (MS = 0.01×AGI)
 const ATTACK_INTERVAL_BASE = 2550; // attack interval ms = BASE / AS
 const JUMP_BASE = 420; // upward velocity floor — tuned so the slowest jumper
                        // (AGI 2 tank) clears the lower-to-upper platform gap.
 const JUMP_PER_AGI = 20; // + per AGI point (jump height scales with AGI)
+const JUMP_COOLDOWN_MS = 2000;
+const JUMP_STA_COST = 100;
 
 interface AuraInstance {
   data: AuraSkillData;
@@ -103,6 +105,7 @@ export abstract class Enemy {
   knockbackEndAt = 0;
   lastHurtAt = -Infinity;
   lastAttackAt = -Infinity;
+  private lastJumpAt = -Infinity;
   spawnX: number;
   spawnY: number;
   alive = true;
@@ -254,8 +257,11 @@ export abstract class Enemy {
 
   castSkill(skill: SkillDef, now: number): boolean {
     if (!this.canCast(skill, now)) return false;
+    const isMovement = skill.core.tags.includes("movement");
+    if (isMovement && this.sta < JUMP_STA_COST) return false;
     this.mp -= skill.core.manaCost;
     this.skillCdUntil.set(skill.core.id, now + skill.core.cooldownMs);
+    if (isMovement) this.sta -= JUMP_STA_COST;
     const run = () => {
       if (!this.alive) return;
       executeSkill(skill, this.getCaster(), {
@@ -337,10 +343,15 @@ export abstract class Enemy {
 
   // ----- Movement helpers -----
 
-  // Jump height scales with AGI. Only fires when grounded.
+  // Jump height scales with AGI. Costs 100 STA; 2-second cooldown.
   tryJump(): boolean {
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     if (!body.blocked.down && !body.touching.down) return false;
+    const now = this.scene.time.now;
+    if (now - this.lastJumpAt < JUMP_COOLDOWN_MS) return false;
+    if (this.sta < JUMP_STA_COST) return false;
+    this.sta -= JUMP_STA_COST;
+    this.lastJumpAt = now;
     const agi = this.stats.getAttributes().AGI;
     body.setVelocityY(-(JUMP_BASE + agi * JUMP_PER_AGI));
     return true;

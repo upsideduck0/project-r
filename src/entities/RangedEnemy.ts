@@ -8,7 +8,8 @@ const CASTER_STATS = computeStatsAtLevel(CASTER_ATTRS, 10);
 
 const ATTACK_RANGE = 360; // x-distance from player a platform must be within
 const HOP_TRIGGER = 200; // hop when the player gets this close
-const HOP_COOLDOWN_MS = 1500;
+const HOP_COOLDOWN_MS = 2000;
+const HOP_STA_COST = 100;
 const FLOOR_Y = 430; // sprite y above this threshold = on a platform (lower
                      // platform sits at center y=410 → sprite rests near 392)
 
@@ -57,8 +58,13 @@ export class RangedEnemy extends Enemy {
     // Fall-off recovery: as soon as we're on the floor, hop back to a
     // platform that keeps the player in shooting range.
     if (grounded && this.sprite.y > FLOOR_Y) {
-      const plat = this.pickShootingPlatform(player);
-      if (plat) this.hopToPlatform(plat);
+      if (this.sta >= HOP_STA_COST) {
+        const plat = this.pickShootingPlatform(player);
+        if (plat) {
+          this.sta -= HOP_STA_COST;
+          this.hopToPlatform(plat);
+        }
+      }
       return;
     }
 
@@ -67,9 +73,10 @@ export class RangedEnemy extends Enemy {
       const dist = this.distanceTo(player);
 
       // Proximity hop: player too close — leap to a further safe platform.
-      if (dist < HOP_TRIGGER && grounded && now - this.lastHopAt > HOP_COOLDOWN_MS) {
+      if (dist < HOP_TRIGGER && grounded && now - this.lastHopAt > HOP_COOLDOWN_MS && this.sta >= HOP_STA_COST) {
         const plat = this.pickShootingPlatform(player);
         if (plat && Math.abs(plat.x - this.sprite.x) > 60) {
+          this.sta -= HOP_STA_COST;
           this.lastHopAt = now;
           this.hopToPlatform(plat);
           return;
