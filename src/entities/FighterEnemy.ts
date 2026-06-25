@@ -22,7 +22,7 @@ export class FighterEnemy extends Enemy {
       trackingDelayMs: 500,
       attributes: { VIT: 8, MIG: 14, AGI: 8, INT: 0, INS: 0, PRE: 0 },
       mainStats: {
-        HP: 100, MP: 30, STA: 24, ATK: 18, DEF: 12, MS: 4, AS: 3, TEN: 6,
+        HP: 50, MP: 30, STA: 24, ATK: 18, DEF: 12, MS: 4, AS: 3, TEN: 6,
       },
       subStats: { GEN: 3 },
     });

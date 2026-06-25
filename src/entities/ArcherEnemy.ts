@@ -22,7 +22,7 @@ export class ArcherEnemy extends Enemy {
       trackingDelayMs: 500,
       attributes: { VIT: 5, MIG: 7, AGI: 12, INT: 6, INS: 8, PRE: 3 },
       mainStats: {
-        HP: 50, MP: 30, STA: 20, ATK: 9, DEF: 4, MS: 1.7, AS: 2, TEN: 0,
+        HP: 25, MP: 30, STA: 20, ATK: 9, DEF: 4, MS: 1.7, AS: 2, TEN: 0,
       },
       subStats: { GEN: 2 },
     });

@@ -27,7 +27,7 @@ export class CommanderEnemy extends Enemy {
       trackingDelayMs: 500,
       attributes: { VIT: 10, MIG: 6, AGI: 6, INT: 8, INS: 8, PRE: 18 },
       mainStats: {
-        HP: 200, MP: 100, STA: 18, ATK: 12, DEF: 30, MS: 3, AS: 2.4, TEN: 10,
+        HP: 100, MP: 100, STA: 18, ATK: 12, DEF: 30, MS: 3, AS: 2.4, TEN: 10,
       },
       subStats: { GEN: 10 },
     });

@@ -88,7 +88,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     damage: 18,
     cooldownMs: 520,
     staminaCost: 0,
-    manaCost: 14,
+    manaCost: 10,
     reach: 0,
     swingHeight: 0,
     swingDurationMs: 0,

@@ -29,7 +29,7 @@ export class RangedEnemy extends Enemy {
       trackingDelayMs: 500,
       attributes: { VIT: 4, MIG: 4, AGI: 6, INT: 14, INS: 10, PRE: 4 },
       mainStats: {
-        HP: 48, MP: 144, STA: 18, ATK: 8, DEF: 6, MS: 3, AS: 2.4, TEN: 4,
+        HP: 36, MP: 144, STA: 18, ATK: 8, DEF: 6, MS: 3, AS: 2.4, TEN: 4,
       },
       subStats: { GEN: 10 },
     });

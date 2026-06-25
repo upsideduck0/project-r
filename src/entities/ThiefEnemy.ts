@@ -22,7 +22,7 @@ export class ThiefEnemy extends Enemy {
       trackingDelayMs: 100,
       attributes: { VIT: 4, MIG: 6, AGI: 18, INT: 0, INS: 0, PRE: 0 },
       mainStats: {
-        HP: 50, MP: 20, STA: 54, ATK: 12, DEF: 6, MS: 9, AS: 7.2, TEN: 0,
+        HP: 25, MP: 20, STA: 54, ATK: 12, DEF: 6, MS: 9, AS: 7.2, TEN: 0,
       },
       subStats: { GEN: 5 },
     });
