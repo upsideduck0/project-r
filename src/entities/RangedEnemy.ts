@@ -21,6 +21,8 @@ export class RangedEnemy extends Enemy {
       bodyOffX: 2,
       bodyOffY: 2,
       respawnMs: 4500,
+      kind: "caster",
+      attributes: { VIT: 4, MIG: 4, AGI: 6, INT: 14, INS: 10, PRE: 4 },
     });
   }
 

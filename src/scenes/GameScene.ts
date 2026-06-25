@@ -16,7 +16,9 @@ import { TankEnemy } from "../entities/TankEnemy";
 import { FighterEnemy } from "../entities/FighterEnemy";
 import { ThiefEnemy } from "../entities/ThiefEnemy";
 import { CommanderEnemy } from "../entities/CommanderEnemy";
+import { ArcherEnemy } from "../entities/ArcherEnemy";
 import { DevConsole } from "../ui/DevConsole";
+import { StatBlock } from "../systems/stats/StatBlock";
 
 const WORLD_WIDTH = 960;
 const WORLD_HEIGHT = 540;
@@ -95,6 +97,7 @@ export class GameScene extends Phaser.Scene {
 
   private combatMode = false;
   private devConsole!: DevConsole;
+  private playerStats!: StatBlock;
 
   constructor() {
     super("GameScene");
@@ -109,6 +112,7 @@ export class GameScene extends Phaser.Scene {
     this.makePixelTexture("px-fighter", 22, 32, 0xe0a040, 0x603a10);
     this.makePixelTexture("px-thief", 16, 26, 0x60d090, 0x205040);
     this.makePixelTexture("px-commander", 24, 34, 0x506fff, 0x18255a);
+    this.makePixelTexture("px-archer", 18, 28, 0x40c0a0, 0x14503f);
     this.makePixelTexture("px-ground", 64, 16, 0x3a3f55, 0x1c1f2b);
     this.makePixelTexture("px-wall", 16, 64, 0x3a3f55, 0x1c1f2b);
     this.makePixelTexture("px-platform", 96, 12, 0x4a5072, 0x252a3d);
@@ -151,6 +155,13 @@ export class GameScene extends Phaser.Scene {
     this.inventory = new Inventory();
     this.seedInventory();
     this.caster = this.buildSkillCaster();
+
+    // Character stat framework for the player. Parallel to the current
+    // hardcoded HP/MP/STA gameplay values (no rebalance yet); future systems
+    // and the /stats command read from here.
+    this.playerStats = new StatBlock({
+      attributes: { VIT: 10, MIG: 10, AGI: 10, INT: 10, INS: 10, PRE: 10 },
+    });
 
     this.buildHud();
     this.hotbarUI = new HotbarUI(
@@ -366,13 +377,58 @@ export class GameScene extends Phaser.Scene {
 
   // -------- Enemy setup --------
 
+  // Every spawnable enemy kind lives in one factory so the default room and
+  // the /spawn console command stay in sync. Returns null for unknown kinds.
+  private createEnemyByKind(kind: string, x: number, y: number): Enemy | null {
+    switch (kind) {
+      case "dummy":
+        return new Dummy(this, x, y);
+      case "chaser":
+        return new MeleeChaser(this, x, y, 500);
+      case "fighter":
+        return new FighterEnemy(this, x, y);
+      case "tank":
+        return new TankEnemy(this, x, y);
+      case "thief":
+        return new ThiefEnemy(this, x, y);
+      case "caster":
+      case "ranged": {
+        const r = new RangedEnemy(this, x, y);
+        r.fireProjectile = (cfg) => this.enemyProjectiles.spawn(cfg);
+        return r;
+      }
+      case "archer": {
+        const a = new ArcherEnemy(this, x, y);
+        a.fireProjectile = (cfg) => this.enemyProjectiles.spawn(cfg);
+        return a;
+      }
+      case "commander": {
+        const c = new CommanderEnemy(this, x, y);
+        c.getEnemies = () => this.enemyEntities;
+        return c;
+      }
+      default:
+        return null;
+    }
+  }
+
+  private registerEnemy(e: Enemy): void {
+    this.enemyEntities.push(e);
+    this.enemies.add(e.sprite);
+  }
+
   private spawnEnemies(): void {
-    const dummy = new Dummy(this, 280, GROUND_Y - 60);
-    const chaser = new MeleeChaser(this, 520, GROUND_Y - 60, 500);
-    const ranged = new RangedEnemy(this, 780, GROUND_Y - 60);
-    ranged.fireProjectile = (cfg) => this.enemyProjectiles.spawn(cfg);
-    this.enemyEntities.push(dummy, chaser, ranged);
-    for (const e of this.enemyEntities) this.enemies.add(e.sprite);
+    // Default test room: tank (front), thief, caster, then commander.
+    const layout: Array<[string, number]> = [
+      ["tank", 280],
+      ["thief", 470],
+      ["caster", 650],
+      ["commander", 830],
+    ];
+    for (const [kind, x] of layout) {
+      const e = this.createEnemyByKind(kind, x, GROUND_Y - 60);
+      if (e) this.registerEnemy(e);
+    }
   }
 
   // -------- Player movement --------
@@ -676,43 +732,30 @@ export class GameScene extends Phaser.Scene {
 
   // -------- Dev console commands --------
 
+  private static readonly SPAWNABLE_KINDS =
+    "tank|fighter|thief|commander|chaser|caster|archer|dummy";
+
   private registerDevCommands(): void {
     this.devConsole.register("spawn", (args) => this.cmdSpawn(args));
     this.devConsole.register("give", (args) => this.cmdGive(args));
     this.devConsole.register("fh", () => this.cmdFullHeal());
+    this.devConsole.register("stats", (args) => this.cmdStats(args));
   }
 
   private cmdSpawn(args: string[]): string {
     const kind = (args[0] ?? "").toLowerCase();
-    if (!kind) return "[DEV] usage: /spawn <tank|fighter|thief|commander>";
+    if (!kind) return `[DEV] usage: /spawn <${GameScene.SPAWNABLE_KINDS}>`;
     const px = Phaser.Math.Clamp(
       this.player.x + this.player.facing * 90,
       40,
       WORLD_WIDTH - 40,
     );
     const py = GROUND_Y - 60;
-    let enemy: Enemy;
-    switch (kind) {
-      case "tank":
-        enemy = new TankEnemy(this, px, py);
-        break;
-      case "fighter":
-        enemy = new FighterEnemy(this, px, py);
-        break;
-      case "thief":
-        enemy = new ThiefEnemy(this, px, py);
-        break;
-      case "commander": {
-        const c = new CommanderEnemy(this, px, py);
-        c.getEnemies = () => this.enemyEntities;
-        enemy = c;
-        break;
-      }
-      default:
-        return `[DEV] unknown enemy: ${kind} (try tank|fighter|thief|commander)`;
+    const enemy = this.createEnemyByKind(kind, px, py);
+    if (!enemy) {
+      return `[DEV] unknown enemy: ${kind} (try ${GameScene.SPAWNABLE_KINDS})`;
     }
-    this.enemyEntities.push(enemy);
-    this.enemies.add(enemy.sprite);
+    this.registerEnemy(enemy);
     return `[DEV] spawned ${kind} at (${Math.round(px)}, ${Math.round(py)})`;
   }
 
@@ -738,6 +781,18 @@ export class GameScene extends Phaser.Scene {
     this.player.mana = MAX_MANA;
     this.player.stamina = MAX_STAMINA;
     return "[DEV] HP, MP, and STA restored.";
+  }
+
+  // /stats           -> dump the player's stat block
+  // /stats <kind>    -> dump the first living enemy of that kind
+  private cmdStats(args: string[]): string {
+    const target = (args[0] ?? "player").toLowerCase();
+    if (target === "player" || target === "p") {
+      return "[DEV] PLAYER stats\n" + this.playerStats.debugString();
+    }
+    const enemy = this.enemyEntities.find((e) => e.alive && e.kind === target);
+    if (!enemy) return `[DEV] no living enemy of kind '${target}'`;
+    return `[DEV] ${target.toUpperCase()} stats\n` + enemy.stats.debugString();
   }
 
   private findFreeSkillSlot(): number {

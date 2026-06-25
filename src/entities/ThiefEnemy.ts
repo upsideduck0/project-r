@@ -24,6 +24,7 @@ export class ThiefEnemy extends Enemy {
       hpBarWidth: 28,
       respawnMs: 3500,
       attackCooldownMs: 650,
+      attributes: { VIT: 4, MIG: 6, AGI: 18, INT: 4, INS: 7, PRE: 3 },
     });
     this.dartTargetX = x;
   }

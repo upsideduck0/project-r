@@ -49,6 +49,7 @@ export class CommanderEnemy extends Enemy {
       hpBarWidth: 60,
       respawnMs: 8000,
       attackCooldownMs: 1400,
+      attributes: { VIT: 10, MIG: 6, AGI: 6, INT: 8, INS: 8, PRE: 18 },
     });
     this.commanderId = `commander-${++commanderCounter}`;
     this.auraRadius = opts.auraRadius ?? DEFAULT_AURA_RADIUS;

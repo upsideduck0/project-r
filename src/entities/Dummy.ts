@@ -13,6 +13,8 @@ export class Dummy extends Enemy {
       bodyOffX: 2,
       bodyOffY: 2,
       respawnMs: 3500,
+      kind: "dummy",
+      attributes: { VIT: 10, MIG: 1, AGI: 1, INT: 1, INS: 1, PRE: 1 },
     });
   }
 }

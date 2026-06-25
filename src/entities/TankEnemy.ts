@@ -19,6 +19,7 @@ export class TankEnemy extends Enemy {
       hpBarWidth: 56,
       respawnMs: 6000,
       attackCooldownMs: 1300,
+      attributes: { VIT: 22, MIG: 10, AGI: 3, INT: 2, INS: 2, PRE: 4 },
     });
   }
 

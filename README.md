@@ -35,6 +35,43 @@ Hotbar (10 slots at bottom-center, `1`–`9`, `0`)
 
 Misc
 - Restart after death: `R`
+- Toggle developer console: backtick `` ` `` (Esc closes)
+
+## Developer console
+
+Open with backtick. While focused, game input is suspended so typing won't
+move the player. Commands (leading slash optional):
+
+- `/spawn <kind>` — spawn an enemy in front of the player. Kinds:
+  `tank`, `fighter`, `thief`, `commander`, `chaser`, `caster`, `archer`,
+  `dummy`.
+- `/give <id>` — add an item (`hp_potion`, `mp_potion`, ...) to the utility
+  bar, or bind a skill (`fireball`, `heal`, `surge`, `blink`) to the next
+  free skill slot.
+- `/fh` — full heal (HP/MP/STA to max).
+- `/stats [kind]` — print the player's stat block, or a living enemy's of
+  the given kind.
+- `/help` — list commands.
+
+Arrow Up/Down browse command history.
+
+## Character stat framework
+
+`src/systems/stats/` holds the attribute -> stat pipeline shared by all
+creatures (players, enemies, bosses, future NPCs):
+
+- Attributes: VIT, MIG, AGI, INT, INS, PRE
+- Main Stats: HP, MP, STA, ATK, DEF, MS, AS, TEN
+- Sub Stats: GEN, CRR, CRD, CDR, PEN, AMP, LS, LUC
+
+`StatBlock` runs `base attributes (+mods) -> derived main/sub (+innate base)
+-> (+mods) -> final values`, cached until something changes. All conversion
+coefficients live in `formulas.ts` so balancing never touches gameplay code.
+Modifiers carry a source tag (`equipment` / `buff` / `debuff` / `passive` /
+`class` / `temporary`) for future systems to inject and remove cleanly.
+
+Note: the framework is wired onto every entity for inspection, but current
+HP/damage/skill values still drive gameplay — no rebalance yet.
 
 ## Code layout
 
@@ -48,23 +85,40 @@ src/
   systems/
     Projectiles.ts             — pooled arcade projectiles
     Inventory.ts               — main/utility/skill slot storage
-  ui/HotbarUI.ts               — generic hotbar (slot data via callback)
+    stats/                     — character stat framework
+      types.ts                 — attribute / main / sub stat keys + sets
+      formulas.ts              — centralized attribute -> stat conversion
+      modifiers.ts             — StatModifier + source tags
+      StatBlock.ts             — per-creature pipeline + debug output
+  ui/
+    HotbarUI.ts                — generic hotbar (slot data via callback)
+    DevConsole.ts              — in-game developer console (DOM overlay)
   entities/
     Enemy.ts                   — base class: HP, aggro, FSM, knockback,
-                                 death + respawn, HP bar
+                                 death + respawn, HP bar, buffs, StatBlock
     Dummy.ts                   — stationary target
     MeleeChaser.ts             — chases when player is in aggro radius
-    RangedEnemy.ts             — kites and fires at the player
+    RangedEnemy.ts             — caster: kites and fires magic bolts
+    ArcherEnemy.ts             — kites and fires arcing arrows
+    TankEnemy.ts               — high HP, slow, knockback-resistant
+    FighterEnemy.ts            — baseline melee
+    ThiefEnemy.ts              — low HP, fast, repositions constantly
+    CommanderEnemy.ts          — buffs nearby allies via aura
 ```
 
 ## Test scene contents
-- Player with HP / MP / STA (rendered in that order, top-left)
-- Three weapons (sword melee, bow with gravity-after-delay arrows, staff
-  with piercing white tracer projectile)
-- Two dummies (idle targets), two melee chasers, two ranged enemies.
-  Knockback decays in ~220 ms thanks to drag + a hard stop in the
-  base `Enemy` class.
+- Closed single-room arena (960×540) walled on all four sides, three
+  one-way platforms in the air.
+- Default enemies: tank (front), thief, caster, then commander. Spawn more
+  of any kind via the developer console.
+- Player with HP / MP / STA (rendered in that order, top-left). Faces the
+  mouse cursor in any mode.
+- Three weapons (sword melee with a 3-frame swing, bow with
+  gravity-after-delay arrows, staff with piercing white tracer projectile).
 - Player projectiles and enemy projectiles live in separate groups so
   enemy shots only damage the player and vice versa.
 - Four example skills (Fireball / Heal / Stamina Surge / Blink) pre-bound
   to skill slots 1–4 for combat-mode testing.
+- Commander aura buffs (configurable): tank +damage reduction, fighter
+  +attack speed, thief +movement speed; all removed when the commander
+  dies.

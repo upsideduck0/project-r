@@ -19,6 +19,7 @@ export class FighterEnemy extends Enemy {
       hpBarWidth: 38,
       respawnMs: 3500,
       attackCooldownMs: 850,
+      attributes: { VIT: 8, MIG: 11, AGI: 8, INT: 3, INS: 3, PRE: 3 },
     });
   }
 

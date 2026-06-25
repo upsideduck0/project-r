@@ -20,6 +20,8 @@ export class MeleeChaser extends Enemy {
       bodyOffX: 2,
       bodyOffY: 2,
       respawnMs: 3500,
+      kind: "chaser",
+      attributes: { VIT: 6, MIG: 8, AGI: 10, INT: 2, INS: 2, PRE: 2 },
     });
     this.chaseCheckInterval = chaseCheckInterval;
   }

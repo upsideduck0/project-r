@@ -1,4 +1,6 @@
 import Phaser from "phaser";
+import { StatBlock } from "../systems/stats/StatBlock";
+import { AttributeSet, MainStatSet, SubStatSet } from "../systems/stats/types";
 
 export type EnemyState = "idle" | "aggro" | "attack" | "hurt" | "dead";
 
@@ -26,6 +28,12 @@ export interface EnemyConfig {
   hpBarWidth?: number;
   respawnMs?: number;
   attackCooldownMs?: number;
+  // Character stat framework. Provided for inspection / future systems; the
+  // values above (maxHp, contactDamage, ...) still drive current gameplay so
+  // behaviour is unchanged.
+  attributes?: Partial<AttributeSet>;
+  baseMainStats?: Partial<MainStatSet>;
+  baseSubStats?: Partial<SubStatSet>;
 }
 
 export interface PlayerView {
@@ -46,6 +54,7 @@ export abstract class Enemy {
   contactDamage: number;
   attackCooldownMs: number;
   kind: string;
+  stats: StatBlock;
   state: EnemyState = "idle";
   knockbackEndAt = 0;
   lastHurtAt = -Infinity;
@@ -75,6 +84,11 @@ export abstract class Enemy {
     this.knockbackResist = cfg.knockbackResist ?? 0;
     this.hpBarWidth = cfg.hpBarWidth ?? 32;
     this.respawnMs = cfg.respawnMs ?? 3500;
+    this.stats = new StatBlock({
+      attributes: cfg.attributes,
+      baseMainStats: cfg.baseMainStats,
+      baseSubStats: cfg.baseSubStats,
+    });
 
     this.sprite = scene.physics.add.sprite(x, y, cfg.textureKey);
     this.sprite.setCollideWorldBounds(true);
