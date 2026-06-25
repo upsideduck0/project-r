@@ -119,6 +119,7 @@ export class GameScene extends Phaser.Scene {
     this.player = this.spawnPlayer(80, GROUND_Y - 60);
 
     this.enemies = this.physics.add.group();
+    this.enemyEntities = [];
     this.spawnEnemies();
 
     this.attackHitbox = this.add.rectangle(0, 0, 36, 24, 0xffe680, 0) as
@@ -342,8 +343,8 @@ export class GameScene extends Phaser.Scene {
   private spawnEnemies(): void {
     const dummies = [new Dummy(this, 400, GROUND_Y - 60), new Dummy(this, 1500, GROUND_Y - 60)];
     const chasers = [
-      new MeleeChaser(this, 820, GROUND_Y - 60),
-      new MeleeChaser(this, 1900, GROUND_Y - 60),
+      new MeleeChaser(this, 820, GROUND_Y - 60, 500),
+      new MeleeChaser(this, 1900, GROUND_Y - 60, 500),
     ];
     const ranged = [
       new RangedEnemy(this, 1200, 250),
