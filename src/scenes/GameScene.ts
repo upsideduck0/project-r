@@ -6,7 +6,13 @@ import {
   buildItemIcons,
 } from "../data/items";
 import { Inventory } from "../systems/Inventory";
-import { SKILLS, SkillCaster, buildSkillIcons } from "../data/skills";
+import {
+  SKILLS,
+  SkillCaster,
+  buildSkillIcons,
+  executeSkill,
+  meetsRequirements,
+} from "../data/skills";
 import { HotbarUI, HotbarSlotDisplay } from "../ui/HotbarUI";
 import { Enemy } from "../entities/Enemy";
 import { Dummy } from "../entities/Dummy";
@@ -689,13 +695,18 @@ export class GameScene extends Phaser.Scene {
     if (!ref) return;
     const skill = SKILLS[ref.skillId];
     if (!skill) return;
+    const core = skill.core;
     const now = this.time.now;
-    const cdUntil = this.skillCooldownUntil.get(skill.id) ?? 0;
+    const cdUntil = this.skillCooldownUntil.get(core.id) ?? 0;
     if (now < cdUntil) return;
-    if (this.player.mana < skill.manaCost) return;
-    this.player.mana -= skill.manaCost;
-    this.skillCooldownUntil.set(skill.id, now + skill.cooldownMs);
-    skill.cast(this.caster);
+    if (this.player.mana < core.manaCost) return;
+    if (!meetsRequirements(core.requirements, this.playerStats.getAttributes()))
+      return;
+    this.player.mana -= core.manaCost;
+    this.skillCooldownUntil.set(core.id, now + core.cooldownMs);
+    // Damage runs through the centralized formula. The context is neutral for
+    // now (no rebalance); pass the player's stats here to enable scaling.
+    executeSkill(skill, this.caster, { damage: {} });
     this.hotbarUI.flash(slot);
   }
 
@@ -705,13 +716,13 @@ export class GameScene extends Phaser.Scene {
       if (!ref) {
         return { iconKey: null, count: null, cooldownPct: 1, cooldownSecondsLeft: 0, available: false };
       }
-      const skill = SKILLS[ref.skillId];
-      const cdUntil = this.skillCooldownUntil.get(skill.id) ?? 0;
+      const core = SKILLS[ref.skillId].core;
+      const cdUntil = this.skillCooldownUntil.get(core.id) ?? 0;
       const remaining = Math.max(0, cdUntil - this.time.now);
-      const pct = skill.cooldownMs > 0 ? 1 - remaining / skill.cooldownMs : 1;
-      const ready = remaining <= 0 && this.player.mana >= skill.manaCost;
+      const pct = core.cooldownMs > 0 ? 1 - remaining / core.cooldownMs : 1;
+      const ready = remaining <= 0 && this.player.mana >= core.manaCost;
       return {
-        iconKey: skill.iconKey,
+        iconKey: core.icon,
         count: null,
         cooldownPct: Phaser.Math.Clamp(pct, 0, 1),
         cooldownSecondsLeft: remaining / 1000,

@@ -81,7 +81,12 @@ src/
   data/
     weapons.ts                 — weapon definitions + textures
     items.ts                   — item registry + icons (potions etc.)
-    skills.ts                  — skill registry + caster interface + icons
+    skills/                    — skill framework (3-layer: core/scaling/type)
+      types.ts                 — SkillDef, tags, rarity, requirements, type data
+      formulas.ts              — centralized damage + requirement checks
+      executor.ts              — tag/type-driven skill execution (no per-skill code)
+      registry.ts              — skill definitions as pure data
+      icons.ts                 — skill icon textures
   systems/
     Projectiles.ts             — pooled arcade projectiles
     Inventory.ts               — main/utility/skill slot storage
