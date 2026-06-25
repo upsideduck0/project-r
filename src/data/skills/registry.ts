@@ -236,9 +236,10 @@ export const SKILLS: Record<string, SkillDef> = {
     },
     scaling: { INT: 0.3, INS: 0.3, PRE: 1.5 },
     aura: {
-      radius: 250,
+      radius: 0, // unused; buffs the entire battlefield
       tickRateMs: 250,
       durationMs: -1, // infinite (passive)
+      global: true,
       kindEffects: {
         tank: [{ stat: "DEF", op: "flat", value: 20 }],
         fighter: [{ stat: "AS", op: "percent", value: 50 }],

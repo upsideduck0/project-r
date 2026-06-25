@@ -24,6 +24,7 @@ export class CommanderEnemy extends Enemy {
       knockbackResist: 0.4,
       hpBarWidth: 60,
       respawnMs: 8000,
+      trackingDelayMs: 500,
       attributes: { VIT: 10, MIG: 6, AGI: 6, INT: 8, INS: 8, PRE: 18 },
       mainStats: {
         HP: 200, MP: 100, STA: 18, ATK: 12, DEF: 30, MS: 3, AS: 2.4, TEN: 10,

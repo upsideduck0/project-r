@@ -4,11 +4,9 @@ import { Enemy, PlayerView } from "./Enemy";
 const LEASH_DISTANCE = 360;
 
 export class MeleeChaser extends Enemy {
-  chaseCheckInterval: number;
-  private lastChaseCheck = -Infinity;
   private cachedVx = 0;
 
-  constructor(scene: Phaser.Scene, x: number, y: number, chaseCheckInterval = 0) {
+  constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, {
       textureKey: "px-chaser",
       kind: "chaser",
@@ -18,13 +16,13 @@ export class MeleeChaser extends Enemy {
       bodyOffX: 2,
       bodyOffY: 2,
       respawnMs: 3500,
+      trackingDelayMs: 500,
       attributes: { VIT: 6, MIG: 8, AGI: 10, INT: 2, INS: 2, PRE: 2 },
       mainStats: {
         HP: 60, MP: 0, STA: 20, ATK: 10, DEF: 5, MS: 3.1, AS: 3, TEN: 0,
       },
       subStats: { GEN: 1 },
     });
-    this.chaseCheckInterval = chaseCheckInterval;
   }
 
   protected tick(now: number, _dt: number, player: PlayerView): void {
@@ -36,8 +34,7 @@ export class MeleeChaser extends Enemy {
       return;
     }
 
-    if (now - this.lastChaseCheck >= this.chaseCheckInterval) {
-      this.lastChaseCheck = now;
+    if (this.shouldTrack(now)) {
       const dist = this.distanceTo(player);
       const homeDist = Math.abs(this.sprite.x - this.spawnX);
       const speed = this.moveSpeedPx();
@@ -47,7 +44,6 @@ export class MeleeChaser extends Enemy {
         const dir = player.x < this.sprite.x ? -1 : 1;
         this.cachedVx = speed * dir;
         this.sprite.setFlipX(dir === -1);
-        if (player.y < this.sprite.y - 40) this.tryJump();
       } else {
         this.state = "idle";
         if (homeDist > 6) {
@@ -61,5 +57,6 @@ export class MeleeChaser extends Enemy {
     }
 
     body.setVelocityX(this.cachedVx);
+    if (this.state === "aggro" && player.y < this.sprite.y - 40) this.tryJump();
   }
 }

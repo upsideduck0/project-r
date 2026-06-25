@@ -128,6 +128,9 @@ export interface AuraSkillData {
   // Different timed stat modifiers per ally kind. Used by buffing auras like
   // command_aura where each minion type receives a tailored effect.
   kindEffects?: Record<string, SkillStatMod[]>;
+  // World-wide aura: ignore radius, hide the ring visual. Useful for
+  // commander-style "buff the entire battlefield" passives.
+  global?: boolean;
 }
 
 export type BuffResource = "hp" | "mp" | "sta";

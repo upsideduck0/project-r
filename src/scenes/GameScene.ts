@@ -276,6 +276,8 @@ export class GameScene extends Phaser.Scene {
   private setupCollisions(): void {
     this.physics.add.collider(this.player, this.solidPlatforms);
     this.physics.add.collider(this.enemies, this.solidPlatforms);
+    // Enemies push each other apart so they don't stack on the same tile.
+    this.physics.add.collider(this.enemies, this.enemies);
     this.physics.add.collider(
       this.player,
       this.oneWayPlatforms,
@@ -390,7 +392,7 @@ export class GameScene extends Phaser.Scene {
       case "dummy":
         return new Dummy(this, x, y);
       case "chaser":
-        return new MeleeChaser(this, x, y, 500);
+        return new MeleeChaser(this, x, y);
       case "fighter":
         return new FighterEnemy(this, x, y);
       case "tank":
@@ -1015,6 +1017,7 @@ export class GameScene extends Phaser.Scene {
     const s = this.physics.add.sprite(x, y, "px-player") as PlayerSprite;
     s.setCollideWorldBounds(true);
     s.setMaxVelocity(DASH_SPEED, 900);
+    s.setDepth(12); // above enemies (10) and buff halos (5).
     s.hp = PLAYER_MAX_HP;
     s.stamina = MAX_STAMINA;
     s.mana = MAX_MANA;
@@ -1078,10 +1081,29 @@ export class GameScene extends Phaser.Scene {
       ) as OneWayPlatform;
       p.refreshBody();
     }
+    // Environment sits at depth -50: above the background, below characters
+    // and their buff halos (which are at 5).
+    this.solidPlatforms.children.iterate((obj) => {
+      (obj as Phaser.GameObjects.Image).setDepth(-50);
+      return true;
+    });
+    this.oneWayPlatforms.children.iterate((obj) => {
+      (obj as Phaser.GameObjects.Image).setDepth(-50);
+      return true;
+    });
   }
 
   private drawParallaxBackground(): void {
-    const g = this.add.graphics();
+    // Far back in the draw order so platforms, characters, and UI all sit on
+    // top of it. Centralized depth scheme:
+    //   background     -1000
+    //   environment      -50 (platforms / walls)
+    //   buff halos         5
+    //   characters        10–13 (enemies 10, player 12, weapon 13)
+    //   cast/aura rings   20–40
+    //   hp bars          900
+    //   hud / damage    1000+
+    const g = this.add.graphics().setDepth(-1000);
     g.fillStyle(0x141728, 1);
     g.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
     g.fillStyle(0x1d2238, 1);

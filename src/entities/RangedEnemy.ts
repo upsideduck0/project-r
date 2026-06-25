@@ -2,14 +2,19 @@ import Phaser from "phaser";
 import { Enemy, PlayerView } from "./Enemy";
 import { SKILLS } from "../data/skills";
 
-const ATTACK_RANGE = 360;
-const HOP_TRIGGER = 180; // hop to a further platform when player is this close
+const ATTACK_RANGE = 360; // x-distance from player a platform must be within
+const HOP_TRIGGER = 200; // hop when the player gets this close
 const HOP_COOLDOWN_MS = 1500;
+const FLOOR_Y = 400; // sprite y above this threshold = on a platform
 
-// The "caster": stays on a platform lobbing orb volleys (the mana_release
-// skill) and leaps to a further platform when the player closes in.
+// Caster: stays on a platform lobbing orb volleys (mana_release) and hops to a
+// further platform when the player gets close. If knocked or pushed onto the
+// floor, immediately hops back to a platform that still has the player in
+// shooting range — "all platform moving behavior should only move to the
+// platform that makes sure the caster can still shoot the player".
 export class RangedEnemy extends Enemy {
-  private nextHopAt = 0;
+  private isHopping = false;
+  private lastHopAt = -Infinity;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, {
@@ -21,6 +26,7 @@ export class RangedEnemy extends Enemy {
       bodyOffX: 2,
       bodyOffY: 2,
       respawnMs: 4500,
+      trackingDelayMs: 500,
       attributes: { VIT: 4, MIG: 4, AGI: 6, INT: 14, INS: 10, PRE: 4 },
       mainStats: {
         HP: 48, MP: 144, STA: 18, ATK: 8, DEF: 6, MS: 3, AS: 2.4, TEN: 4,
@@ -31,51 +37,105 @@ export class RangedEnemy extends Enemy {
   }
 
   protected tick(now: number, _dt: number, player: PlayerView): void {
-    if (this.state === "hurt") return;
+    if (this.isHopping || this.state === "hurt") return;
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     if (!player.alive) {
       body.setVelocityX(0);
       return;
     }
 
-    const dist = this.distanceTo(player);
     const grounded = body.blocked.down || body.touching.down;
-    this.sprite.setFlipX(player.x < this.sprite.x);
 
-    // Player too close: hop to the platform furthest from them.
-    if (dist < HOP_TRIGGER && grounded && now >= this.nextHopAt) {
-      this.nextHopAt = now + HOP_COOLDOWN_MS;
-      this.hopToFurtherPlatform(player);
+    // Fall-off recovery: as soon as we're on the floor, hop back to a
+    // platform that keeps the player in shooting range.
+    if (grounded && this.sprite.y > FLOOR_Y) {
+      const plat = this.pickShootingPlatform(player);
+      if (plat) this.hopToPlatform(plat);
       return;
     }
 
-    if (grounded) body.setVelocityX(0);
+    if (this.shouldTrack(now)) {
+      this.sprite.setFlipX(player.x < this.sprite.x);
+      const dist = this.distanceTo(player);
 
-    if (dist < ATTACK_RANGE) {
-      this.state = "aggro";
-      this.castSkill(SKILLS.mana_release, now);
-    } else {
-      this.state = "idle";
+      // Proximity hop: player too close — leap to a further safe platform.
+      if (dist < HOP_TRIGGER && grounded && now - this.lastHopAt > HOP_COOLDOWN_MS) {
+        const plat = this.pickShootingPlatform(player);
+        if (plat && Math.abs(plat.x - this.sprite.x) > 60) {
+          this.lastHopAt = now;
+          this.hopToPlatform(plat);
+          return;
+        }
+      }
+
+      if (dist < ATTACK_RANGE) {
+        this.state = "aggro";
+        this.castSkill(SKILLS.mana_release, now);
+      } else {
+        this.state = "idle";
+      }
     }
+
+    if (grounded) body.setVelocityX(0);
   }
 
-  private hopToFurtherPlatform(player: PlayerView): void {
+  // Picks the platform that gives the caster the most distance from the
+  // player while still being within shooting range. If nothing is in range,
+  // settles for the closest in-range platform we can find.
+  private pickShootingPlatform(
+    player: PlayerView,
+  ): { x: number; y: number } | null {
     const plats = this.ability?.platformTops() ?? [];
-    let best: { x: number; y: number } | null = null;
-    let bestD = -1;
-    for (const p of plats) {
-      if (Math.abs(p.x - this.sprite.x) < 8) continue; // skip current platform
+    if (plats.length === 0) return null;
+    const inRange = plats.filter(
+      (p) => Math.abs(p.x - player.x) <= ATTACK_RANGE,
+    );
+    const pool = inRange.length > 0 ? inRange : plats;
+    let best = pool[0];
+    let bestDistFromPlayer = -1;
+    for (const p of pool) {
       const d = Math.abs(p.x - player.x);
-      if (d > bestD) {
-        bestD = d;
+      if (d > bestDistFromPlayer) {
+        bestDistFromPlayer = d;
         best = p;
       }
     }
-    if (!best) return;
-    const body = this.sprite.body as Phaser.Physics.Arcade.Body;
-    const dir = best.x < this.sprite.x ? -1 : 1;
-    body.setVelocityX(dir * 250);
-    body.setVelocityY(-500);
+    return best;
+  }
+
+  // Parabolic arc to the target platform. Body is disabled mid-flight so the
+  // tween position is authoritative; re-enabled on landing.
+  private hopToPlatform(target: { x: number; y: number }): void {
+    this.isHopping = true;
     this.state = "aggro";
+    const body = this.sprite.body as Phaser.Physics.Arcade.Body;
+    body.enable = false;
+    body.setVelocity(0, 0);
+    const sx = this.sprite.x;
+    const sy = this.sprite.y;
+    const ex = target.x;
+    const ey = target.y;
+    const peak = Math.max(80, Math.abs(sy - ey) + 60);
+    this.sprite.setFlipX(ex < sx);
+    this.scene.tweens.addCounter({
+      from: 0,
+      to: 1,
+      duration: 450,
+      ease: "Linear",
+      onUpdate: (tw) => {
+        const p = tw.getValue() ?? 0;
+        this.sprite.x = sx + (ex - sx) * p;
+        const lin = sy + (ey - sy) * p;
+        const arc = -4 * peak * p * (1 - p);
+        this.sprite.y = lin + arc;
+      },
+      onComplete: () => {
+        this.sprite.x = ex;
+        this.sprite.y = ey;
+        body.enable = true;
+        body.setVelocity(0, 0);
+        this.isHopping = false;
+      },
+    });
   }
 }

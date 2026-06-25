@@ -2,10 +2,11 @@ import Phaser from "phaser";
 import { Enemy, PlayerView } from "./Enemy";
 import { SKILLS } from "../data/skills";
 
-// Ally is "threatened" when this close to the player.
 const ALLY_THREAT_RANGE = 160;
 
 export class TankEnemy extends Enemy {
+  private cachedVx = 0;
+
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, {
       textureKey: "px-tank",
@@ -18,7 +19,8 @@ export class TankEnemy extends Enemy {
       knockbackResist: 0.85,
       hpBarWidth: 56,
       respawnMs: 6000,
-      // AGI 1 (override): tiny jump, slow. Other values per spec sheet.
+      trackingDelayMs: 500,
+      // AGI 1 (override): tiny jump, slow.
       attributes: { VIT: 22, MIG: 10, AGI: 1, INT: 2, INS: 2, PRE: 4 },
       mainStats: {
         HP: 216, MP: 10, STA: 9, ATK: 20, DEF: 33, MS: 1.5, AS: 1.2, TEN: 22,
@@ -33,26 +35,29 @@ export class TankEnemy extends Enemy {
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     if (!player.alive) {
       body.setVelocityX(0);
+      this.cachedVx = 0;
       return;
     }
 
-    // Protect: leap to a threatened ally and reinforce them.
-    if (this.shouldProtect(player) && this.castSkill(SKILLS.protect, now)) {
-      return;
+    if (this.shouldTrack(now)) {
+      if (this.shouldProtect(player) && this.castSkill(SKILLS.protect, now)) {
+        return;
+      }
+      const dist = this.distanceTo(player);
+      const speed = this.moveSpeedPx();
+      if (dist < this.aggroRadius) {
+        this.state = "aggro";
+        const dir = player.x < this.sprite.x ? -1 : 1;
+        this.cachedVx = speed * dir;
+        this.sprite.setFlipX(dir === -1);
+      } else {
+        this.state = "idle";
+        this.cachedVx = 0;
+      }
     }
 
-    const dist = this.distanceTo(player);
-    const speed = this.moveSpeedPx();
-    if (dist < this.aggroRadius) {
-      this.state = "aggro";
-      const dir = player.x < this.sprite.x ? -1 : 1;
-      body.setVelocityX(speed * dir);
-      this.sprite.setFlipX(dir === -1);
-      if (player.y < this.sprite.y - 40) this.tryJump();
-    } else {
-      this.state = "idle";
-      body.setVelocityX(0);
-    }
+    body.setVelocityX(this.cachedVx);
+    if (this.state === "aggro" && player.y < this.sprite.y - 40) this.tryJump();
   }
 
   private shouldProtect(player: PlayerView): boolean {

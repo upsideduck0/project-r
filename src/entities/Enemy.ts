@@ -25,6 +25,10 @@ export interface EnemyConfig {
   knockbackResist?: number;
   hpBarWidth?: number;
   respawnMs?: number;
+  // Throttles AI re-evaluation. Decisions and direction caching only fire once
+  // every N ms; per-frame work (velocity application, jump, hp bar) still runs
+  // every frame. 0 = re-evaluate every frame.
+  trackingDelayMs?: number;
   // Character stat framework. Enemies use authored main/sub stats (their
   // hand-tuned sheets are exact); gameplay reads HP/ATK/MS/AS/GEN from here.
   attributes?: Partial<AttributeSet>;
@@ -82,6 +86,7 @@ export abstract class Enemy {
   maxSta: number;
   aggroRadius: number;
   kind: string;
+  trackingDelayMs: number;
   stats: StatBlock;
   state: EnemyState = "idle";
   knockbackEndAt = 0;
@@ -90,6 +95,7 @@ export abstract class Enemy {
   spawnX: number;
   spawnY: number;
   alive = true;
+  private nextTrackAt = -Infinity;
 
   skills: SkillDef[] = [];
   ability?: EnemyAbilityContext;
@@ -120,6 +126,7 @@ export abstract class Enemy {
     this.spawnY = y;
     this.aggroRadius = cfg.aggroRadius;
     this.kind = cfg.kind ?? "enemy";
+    this.trackingDelayMs = cfg.trackingDelayMs ?? 0;
     this.knockbackResist = cfg.knockbackResist ?? 0;
     this.hpBarWidth = cfg.hpBarWidth ?? 32;
     this.respawnMs = cfg.respawnMs ?? 3500;
@@ -140,6 +147,7 @@ export abstract class Enemy {
 
     this.sprite = scene.physics.add.sprite(x, y, cfg.textureKey);
     this.sprite.setCollideWorldBounds(true);
+    this.sprite.setDepth(10); // explicit: characters render above environment.
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.setSize(cfg.bodyW, cfg.bodyH).setOffset(cfg.bodyOffX, cfg.bodyOffY);
     body.setDragX(2000);
@@ -161,12 +169,14 @@ export abstract class Enemy {
       )
       .setOrigin(0, 0.5)
       .setDepth(901);
-    // Bright pulsing yellow halo behind the sprite; on while any buff is active.
+    // White halo behind the sprite, visible while any buff is active.
+    // Depth 5 puts it above environment (-50) and below characters (10) so it
+    // reads as a glow extending past the sprite outline.
     this.buffGlow = scene.add
-      .ellipse(x, y, cfg.bodyW + 30, cfg.bodyH + 32, 0xffe24a, 0.85)
-      .setStrokeStyle(2, 0xfff2a0, 0.9)
+      .ellipse(x, y, cfg.bodyW + 32, cfg.bodyH + 34, 0xffffff, 0.85)
+      .setStrokeStyle(2, 0xffffff, 0.95)
       .setBlendMode(Phaser.BlendModes.ADD)
-      .setDepth(this.sprite.depth - 1)
+      .setDepth(5)
       .setVisible(false);
   }
 
@@ -183,6 +193,16 @@ export abstract class Enemy {
   attackIntervalMs(): number {
     const as = Math.max(0.1, this.stats.getMain("AS"));
     return Phaser.Math.Clamp(ATTACK_INTERVAL_BASE / as, 120, 6000);
+  }
+
+  // True at most once every trackingDelayMs. Subclasses gate AI re-evaluation
+  // (direction choice, cast attempts, etc.) behind this so behaviour has a
+  // predictable reaction latency. Per-frame work (velocity application, jump,
+  // hp bar) still runs every frame.
+  protected shouldTrack(now: number): boolean {
+    if (now < this.nextTrackAt) return false;
+    this.nextTrackAt = now + this.trackingDelayMs;
+    return true;
   }
 
   // ----- Ability wiring -----
@@ -460,10 +480,13 @@ export abstract class Enemy {
 
   private startAura(data: AuraSkillData, skillId: string, color: number): void {
     if (this.hasAura(skillId)) return;
-    const ring = this.scene.add
-      .circle(this.sprite.x, this.sprite.y, data.radius, color, 0.05)
-      .setStrokeStyle(2, color, 0.4)
-      .setDepth(40);
+    // Global auras don't show a radius ring — they cover the whole field.
+    const ring = data.global
+      ? this.scene.add.circle(this.sprite.x, this.sprite.y, 1, color, 0).setVisible(false)
+      : this.scene.add
+          .circle(this.sprite.x, this.sprite.y, data.radius, color, 0.05)
+          .setStrokeStyle(2, color, 0.4)
+          .setDepth(40);
     this.auras.push({
       data,
       skillId,
@@ -497,9 +520,11 @@ export abstract class Enemy {
     const r2 = aura.data.radius * aura.data.radius;
     const inRange = new Set<Enemy>();
     for (const ally of this.ability.allies()) {
-      const dx = ally.sprite.x - this.sprite.x;
-      const dy = ally.sprite.y - this.sprite.y;
-      if (dx * dx + dy * dy > r2) continue;
+      if (!aura.data.global) {
+        const dx = ally.sprite.x - this.sprite.x;
+        const dy = ally.sprite.y - this.sprite.y;
+        if (dx * dx + dy * dy > r2) continue;
+      }
       const mods = effects[ally.kind] ?? effects["*"];
       if (!mods) continue;
       inRange.add(ally);
@@ -554,7 +579,9 @@ export abstract class Enemy {
   tryAttackPlayer(now: number): number | null {
     if (now - this.lastAttackAt < this.attackIntervalMs()) return null;
     this.lastAttackAt = now;
-    let dmg = this.atk;
+    // Bodily contact damage = 1×VIT before any downstream calc (e.g. DEF).
+    // Projectile / skill damage is a separate path and uses skill values.
+    let dmg = Math.max(1, Math.round(this.stats.getAttributes().VIT));
     if (now < this.nextAttackBonusUntil) {
       dmg += this.nextAttackBonus;
       this.nextAttackBonus = 0;
