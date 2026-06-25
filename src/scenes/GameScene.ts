@@ -13,9 +13,10 @@ import { Dummy } from "../entities/Dummy";
 import { MeleeChaser } from "../entities/MeleeChaser";
 import { RangedEnemy } from "../entities/RangedEnemy";
 
-const WORLD_WIDTH = 2880;
+const WORLD_WIDTH = 960;
 const WORLD_HEIGHT = 540;
 const GROUND_Y = 480;
+const WALL_THICKNESS = 16;
 
 const PLAYER_SPEED = 220;
 const PLAYER_MAX_HP = 100;
@@ -100,6 +101,7 @@ export class GameScene extends Phaser.Scene {
     this.makePixelTexture("px-chaser", 20, 28, 0xe05050, 0x5a2020);
     this.makePixelTexture("px-ranged", 18, 28, 0x9070ff, 0x3a2580);
     this.makePixelTexture("px-ground", 64, 16, 0x3a3f55, 0x1c1f2b);
+    this.makePixelTexture("px-wall", 16, 64, 0x3a3f55, 0x1c1f2b);
     this.makePixelTexture("px-platform", 96, 12, 0x4a5072, 0x252a3d);
     buildWeaponTextures(this);
     buildItemIcons(this);
@@ -178,22 +180,23 @@ export class GameScene extends Phaser.Scene {
     const left = this.cursors.left?.isDown || this.keyA.isDown;
     const right = this.cursors.right?.isDown || this.keyD.isDown;
     if (!dashing) {
-      if (left && !right) {
-        body.setVelocityX(-PLAYER_SPEED);
-        this.player.facing = -1;
-        this.player.setFlipX(true);
-      } else if (right && !left) {
-        body.setVelocityX(PLAYER_SPEED);
-        this.player.facing = 1;
-        this.player.setFlipX(false);
-      } else {
-        body.setVelocityX(0);
-      }
+      if (left && !right) body.setVelocityX(-PLAYER_SPEED);
+      else if (right && !left) body.setVelocityX(PLAYER_SPEED);
+      else body.setVelocityX(0);
     } else {
       body.setVelocityX(DASH_SPEED * this.player.dashDir);
     }
     body.setAllowGravity(!dashing);
     if (dashing) body.setVelocityY(0);
+
+    // Always face the cursor, in any mode. Small deadzone avoids jitter
+    // when the pointer sits right on top of the player.
+    const pointer = this.input.activePointer;
+    const dxToCursor = pointer.worldX - this.player.x;
+    if (Math.abs(dxToCursor) > 4) {
+      this.player.facing = dxToCursor < 0 ? -1 : 1;
+      this.player.setFlipX(this.player.facing === -1);
+    }
 
     if (this.attackHitbox.body.enable) {
       const offsetX = this.player.facing * (this.player.weapon.reach / 2);
@@ -341,19 +344,11 @@ export class GameScene extends Phaser.Scene {
   // -------- Enemy setup --------
 
   private spawnEnemies(): void {
-    const dummies = [new Dummy(this, 400, GROUND_Y - 60), new Dummy(this, 1500, GROUND_Y - 60)];
-    const chasers = [
-      new MeleeChaser(this, 820, GROUND_Y - 60, 500),
-      new MeleeChaser(this, 1900, GROUND_Y - 60, 500),
-    ];
-    const ranged = [
-      new RangedEnemy(this, 1200, 250),
-      new RangedEnemy(this, 2300, GROUND_Y - 60),
-    ];
-    for (const r of ranged) {
-      r.fireProjectile = (cfg) => this.enemyProjectiles.spawn(cfg);
-    }
-    this.enemyEntities.push(...dummies, ...chasers, ...ranged);
+    const dummy = new Dummy(this, 280, GROUND_Y - 60);
+    const chaser = new MeleeChaser(this, 520, GROUND_Y - 60, 500);
+    const ranged = new RangedEnemy(this, 780, GROUND_Y - 60);
+    ranged.fireProjectile = (cfg) => this.enemyProjectiles.spawn(cfg);
+    this.enemyEntities.push(dummy, chaser, ranged);
     for (const e of this.enemyEntities) this.enemies.add(e.sprite);
   }
 
@@ -373,8 +368,6 @@ export class GameScene extends Phaser.Scene {
     this.player.stamina -= DASH_STAMINA_COST;
     this.player.dashUntil = this.time.now + DASH_DURATION_MS;
     this.player.dashDir = dir;
-    this.player.facing = dir;
-    this.player.setFlipX(dir === -1);
     this.spawnDashTrail();
   }
 
@@ -519,8 +512,6 @@ export class GameScene extends Phaser.Scene {
       glowFrequencyMs: w.glowFrequencyMs,
       glowLifespanMs: w.glowLifespanMs,
     });
-    this.player.facing = dx >= 0 ? 1 : -1;
-    this.player.setFlipX(this.player.facing === -1);
   }
 
   private updateWeaponVisual(now: number): void {
@@ -529,14 +520,47 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     const w = this.player.weapon;
+    const facing = this.player.facing;
     this.weaponVisual.setTexture(w.heldTexture);
-    const swinging =
-      w.type === "melee" && now - this.player.lastAttackAt < w.swingDurationMs;
-    const tilt = swinging ? this.player.facing * 1.0 : this.player.facing * 0.25;
+    const isSword = w.id === "wooden_sword";
+    const scale = isSword ? 2 : 1;
+    this.weaponVisual.setScale(scale);
+
+    const elapsed = now - this.player.lastAttackAt;
+    const swinging = w.type === "melee" && elapsed < w.swingDurationMs;
+
+    let rot: number;
+    let ox: number;
+    let oy: number;
+    if (isSword && swinging) {
+      // Three discrete swing keyframes: windup, strike, follow-through.
+      const t = elapsed / w.swingDurationMs;
+      const frame = t < 1 / 3 ? 0 : t < 2 / 3 ? 1 : 2;
+      const SWING_FRAMES: Array<{ rot: number; ox: number; oy: number }> = [
+        { rot: -1.4, ox: 4, oy: -10 },
+        { rot: 0.2, ox: 22, oy: -2 },
+        { rot: 1.5, ox: 14, oy: 14 },
+      ];
+      const f = SWING_FRAMES[frame];
+      rot = facing * f.rot;
+      ox = facing * f.ox;
+      oy = f.oy;
+    } else if (isSword) {
+      // Idle hold for the (now larger) sword.
+      rot = facing * 0.25;
+      ox = facing * 14;
+      oy = 6;
+    } else {
+      // Bow / staff resting hold.
+      rot = facing * 0.25;
+      ox = facing * 9;
+      oy = 4;
+    }
+
     this.weaponVisual
-      .setPosition(this.player.x + this.player.facing * 9, this.player.y + 4)
-      .setRotation(tilt)
-      .setFlipX(this.player.facing === -1)
+      .setPosition(this.player.x + ox, this.player.y + oy)
+      .setRotation(rot)
+      .setFlipX(facing === -1)
       .setVisible(true);
   }
 
@@ -784,6 +808,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private buildLevel(): void {
+    // Floor
     for (let x = 0; x < WORLD_WIDTH; x += 64) {
       const g = this.solidPlatforms.create(
         x + 32,
@@ -792,16 +817,35 @@ export class GameScene extends Phaser.Scene {
       ) as Phaser.Physics.Arcade.Image;
       g.refreshBody();
     }
+    // Ceiling
+    for (let x = 0; x < WORLD_WIDTH; x += 64) {
+      const c = this.solidPlatforms.create(
+        x + 32,
+        WALL_THICKNESS / 2,
+        "px-ground",
+      ) as Phaser.Physics.Arcade.Image;
+      c.refreshBody();
+    }
+    // Left + right walls (interior of the room)
+    for (let y = WALL_THICKNESS; y < GROUND_Y; y += 64) {
+      const lw = this.solidPlatforms.create(
+        WALL_THICKNESS / 2,
+        y + 32,
+        "px-wall",
+      ) as Phaser.Physics.Arcade.Image;
+      lw.refreshBody();
+      const rw = this.solidPlatforms.create(
+        WORLD_WIDTH - WALL_THICKNESS / 2,
+        y + 32,
+        "px-wall",
+      ) as Phaser.Physics.Arcade.Image;
+      rw.refreshBody();
+    }
+    // Three in-air one-way platforms
     const platSpots: Array<[number, number]> = [
-      [320, 380],
-      [560, 320],
-      [820, 320],
-      [1180, 300],
-      [1420, 340],
-      [1720, 320],
-      [2020, 300],
-      [2260, 240],
-      [2520, 350],
+      [220, 380],
+      [480, 300],
+      [740, 380],
     ];
     for (const [px, py] of platSpots) {
       const p = this.oneWayPlatforms.create(
