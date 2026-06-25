@@ -33,6 +33,9 @@ export interface WeaponDef {
 
   // ----- Requirements -----
   requirements: Partial<Record<AttributeKey, number>>;
+  // When true the requirement check is skipped entirely. Use for trial /
+  // training weapons that must always be usable regardless of attributes.
+  ignoreRequirements: boolean;
 
   // ----- Combat Stats -----
   baseDamage: number;
@@ -78,6 +81,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     rarity: "common",
     type: "melee",
     requirements: { MIG: 4 },
+    ignoreRequirements: true,
     baseDamage: 14,
     attackSpeedMod: 1.0,
     range: 72,
@@ -109,6 +113,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     rarity: "common",
     type: "ranged",
     requirements: { AGI: 6 },
+    ignoreRequirements: true,
     baseDamage: 10,
     attackSpeedMod: 1.0,
     range: 720,
@@ -140,6 +145,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     rarity: "common",
     type: "magic",
     requirements: { INT: 6 },
+    ignoreRequirements: true,
     baseDamage: 18,
     attackSpeedMod: 1.0,
     range: 280,
@@ -171,6 +177,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     rarity: "uncommon",
     type: "melee",
     requirements: { MIG: 10 },
+    ignoreRequirements: false,
     baseDamage: 22,
     attackSpeedMod: 0.85,
     range: 84,
@@ -202,6 +209,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     rarity: "common",
     type: "melee",
     requirements: { AGI: 8 },
+    ignoreRequirements: false,
     baseDamage: 8,
     attackSpeedMod: 1.3,
     range: 40,
@@ -233,6 +241,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     rarity: "uncommon",
     type: "melee",
     requirements: { VIT: 10, MIG: 6 },
+    ignoreRequirements: false,
     baseDamage: 10,
     attackSpeedMod: 0.7,
     range: 56,
@@ -274,17 +283,34 @@ export function computeWeaponDamage(
   return Math.round(dmg);
 }
 
-// Returns true if the wielder satisfies every requirement.
+// Returns true if the wielder satisfies every requirement. When
+// ignoreRequirements is set the check always passes (trial weapons).
 export function meetsWeaponRequirements(
   w: WeaponDef,
   attrs: Partial<Record<AttributeKey, number>>,
 ): boolean {
+  if (w.ignoreRequirements) return true;
   for (const key of Object.keys(w.requirements) as AttributeKey[]) {
     const need = w.requirements[key] ?? 0;
     const have = attrs[key] ?? 0;
     if (have < need) return false;
   }
   return true;
+}
+
+// Returns a human-readable description of the first unmet requirement, or
+// null if all requirements pass. Used for failure feedback in UI.
+export function weaponRequirementFailReason(
+  w: WeaponDef,
+  attrs: Partial<Record<AttributeKey, number>>,
+): string | null {
+  if (w.ignoreRequirements) return null;
+  for (const key of Object.keys(w.requirements) as AttributeKey[]) {
+    const need = w.requirements[key] ?? 0;
+    const have = attrs[key] ?? 0;
+    if (have < need) return `Requires ${key} ${need}`;
+  }
+  return null;
 }
 
 // Effective attack cooldown in milliseconds — slower weapons have lower

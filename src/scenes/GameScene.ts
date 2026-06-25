@@ -5,6 +5,7 @@ import {
   buildWeaponTextures,
   computeWeaponDamage,
   meetsWeaponRequirements,
+  weaponRequirementFailReason,
   weaponCooldownMs,
 } from "../data/weapons";
 import { ProjectileSpawnConfig, ProjectileSystem } from "../systems/Projectiles";
@@ -594,7 +595,11 @@ export class GameScene extends Phaser.Scene {
     if (now - this.player.lastAttackAt < cd) return;
     if (this.player.stamina < w.staminaCost) return;
     if (this.player.mana < w.manaCost) return;
-    if (!meetsWeaponRequirements(w, this.playerStats.getAttributes())) return;
+    const reqFail = weaponRequirementFailReason(w, this.playerStats.getAttributes());
+    if (reqFail !== null) {
+      this.spawnReqFailToast(reqFail);
+      return;
+    }
     this.player.stamina -= w.staminaCost;
     this.player.mana -= w.manaCost;
     this.player.lastAttackAt = now;
@@ -1272,6 +1277,35 @@ export class GameScene extends Phaser.Scene {
       alpha: 0,
       duration: 200,
       onComplete: () => ghost.destroy(),
+    });
+  }
+
+  private reqFailToastUntil = -Infinity;
+
+  private spawnReqFailToast(message: string): void {
+    const now = this.time.now;
+    if (now < this.reqFailToastUntil) return;
+    this.reqFailToastUntil = now + 1200;
+    const x = this.player.x;
+    const y = this.player.y - 40;
+    const txt = this.add
+      .text(x, y, message, {
+        fontFamily: "monospace",
+        fontSize: "13px",
+        color: "#ff9940",
+        fontStyle: "bold",
+        stroke: "#000000",
+        strokeThickness: 3,
+      })
+      .setOrigin(0.5)
+      .setDepth(2500);
+    this.tweens.add({
+      targets: txt,
+      y: y - 32,
+      alpha: 0,
+      duration: 900,
+      ease: "Cubic.easeOut",
+      onComplete: () => txt.destroy(),
     });
   }
 
