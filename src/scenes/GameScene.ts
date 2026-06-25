@@ -14,7 +14,7 @@ import {
   buildItemIcons,
 } from "../data/items";
 import { Inventory } from "../systems/Inventory";
-import { tackleDamage } from "../systems/combat";
+import { tackleDamage, mitigateDamage } from "../systems/combat";
 import {
   SKILLS,
   SkillCaster,
@@ -901,9 +901,10 @@ export class GameScene extends Phaser.Scene {
       if (hitSet.has(enemy)) return;
       hitSet.add(enemy);
     }
-    const dmg = (this.attackHitbox.getData("damage") as number) ?? 0;
+    const rawDmg = (this.attackHitbox.getData("damage") as number) ?? 0;
     const knockX = (this.attackHitbox.getData("knockX") as number) ?? 0;
     const knockY = (this.attackHitbox.getData("knockY") as number) ?? -120;
+    const dmg = mitigateDamage(rawDmg, enemy.stats.getMain("DEF"));
     enemy.takeDamage(dmg, knockX, knockY);
     this.spawnDamageNumber(enemy.sprite.x, enemy.sprite.y - 30, dmg, "#ffd060");
     if (!enemy.alive) this.spawnHitFlash(enemy.sprite.x, enemy.sprite.y);
@@ -925,10 +926,11 @@ export class GameScene extends Phaser.Scene {
       if (proj.getData("hit")) return;
       proj.setData("hit", true);
     }
-    const dmg = (proj.getData("damage") as number) ?? 0;
+    const rawDmg = (proj.getData("damage") as number) ?? 0;
     const knockX = (proj.getData("knockX") as number) ?? 0;
     const knockY = (proj.getData("knockY") as number) ?? -60;
     const vx = (proj.body as Phaser.Physics.Arcade.Body).velocity.x;
+    const dmg = mitigateDamage(rawDmg, enemy.stats.getMain("DEF"));
     enemy.takeDamage(dmg, Math.sign(vx) * knockX, knockY);
     this.spawnDamageNumber(enemy.sprite.x, enemy.sprite.y - 30, dmg, "#ffd060");
     if (!enemy.alive) this.spawnHitFlash(enemy.sprite.x, enemy.sprite.y);
