@@ -69,7 +69,8 @@ export abstract class Enemy {
   private hpBarOffsetY: number;
   private respawnMs: number;
   private buffs = new Map<string, BuffMods>();
-  private buffDot: Phaser.GameObjects.Arc;
+  private buffGlow: Phaser.GameObjects.Ellipse;
+  private buffGlowTween?: Phaser.Tweens.Tween;
 
   constructor(scene: Phaser.Scene, x: number, y: number, cfg: EnemyConfig) {
     this.scene = scene;
@@ -120,20 +121,44 @@ export abstract class Enemy {
       )
       .setOrigin(0, 0.5)
       .setDepth(901);
-    this.buffDot = scene.add
-      .circle(x, y + this.hpBarOffsetY - 6, 3, 0xffd060, 0.95)
-      .setDepth(902)
+    // Yellow halo behind the sprite; visible whenever any buff is active.
+    // Drawn slightly larger than the body, additive-blended, gently pulsing.
+    this.buffGlow = scene.add
+      .ellipse(x, y, cfg.bodyW + 20, cfg.bodyH + 22, 0xffd060, 0.45)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setDepth(this.sprite.depth - 1)
       .setVisible(false);
   }
 
   applyBuff(sourceId: string, mods: BuffMods): void {
     this.buffs.set(sourceId, mods);
-    this.buffDot.setVisible(this.alive);
+    if (this.alive) this.showBuffGlow();
   }
 
   removeBuff(sourceId: string): void {
     if (!this.buffs.delete(sourceId)) return;
-    if (this.buffs.size === 0) this.buffDot.setVisible(false);
+    if (this.buffs.size === 0) this.hideBuffGlow();
+  }
+
+  private showBuffGlow(): void {
+    if (this.buffGlow.visible) return;
+    this.buffGlow.setVisible(true);
+    this.buffGlowTween = this.scene.tweens.add({
+      targets: this.buffGlow,
+      alpha: { from: 0.35, to: 0.7 },
+      duration: 600,
+      yoyo: true,
+      repeat: -1,
+    });
+  }
+
+  private hideBuffGlow(): void {
+    if (!this.buffGlow.visible) return;
+    this.buffGlow.setVisible(false);
+    if (this.buffGlowTween) {
+      this.buffGlowTween.remove();
+      this.buffGlowTween = undefined;
+    }
   }
 
   hasBuff(sourceId: string): boolean {
@@ -193,7 +218,7 @@ export abstract class Enemy {
     (this.sprite.body as Phaser.Physics.Arcade.Body).enable = false;
     this.hpBg.setVisible(false);
     this.hpFill.setVisible(false);
-    this.buffDot.setVisible(false);
+    this.hideBuffGlow();
     this.onDeath();
   }
 
@@ -208,7 +233,7 @@ export abstract class Enemy {
     body.setVelocity(0, 0);
     this.hpBg.setVisible(true);
     this.hpFill.setVisible(true);
-    this.buffDot.setVisible(this.buffs.size > 0);
+    if (this.buffs.size > 0) this.showBuffGlow();
   }
 
   protected onDeath(): void {
@@ -228,7 +253,7 @@ export abstract class Enemy {
       this.sprite.y + this.hpBarOffsetY,
     );
     this.hpFill.width = this.hpBarWidth * (this.hp / this.maxHp);
-    this.buffDot.setPosition(this.sprite.x, this.sprite.y + this.hpBarOffsetY - 6);
+    this.buffGlow.setPosition(this.sprite.x, this.sprite.y);
 
     if (this.state === "hurt" && now >= this.knockbackEndAt) {
       const body = this.sprite.body as Phaser.Physics.Arcade.Body;

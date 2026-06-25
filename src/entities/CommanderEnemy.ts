@@ -2,7 +2,6 @@ import Phaser from "phaser";
 import { BuffMods, Enemy, PlayerView } from "./Enemy";
 
 const COMMANDER_SPEED = 60;
-const DEFAULT_AURA_RADIUS = 220;
 const KITE_TRIGGER_DISTANCE = 180;
 
 let commanderCounter = 0;
@@ -14,7 +13,6 @@ export const DEFAULT_AURA_BUFFS: Record<string, BuffMods> = {
 };
 
 export interface CommanderOptions {
-  auraRadius?: number;
   auraBuffs?: Record<string, BuffMods>;
 }
 
@@ -22,11 +20,9 @@ export class CommanderEnemy extends Enemy {
   // Injected by the scene. Should return every other enemy in the world
   // (this commander filters itself out).
   getEnemies?: () => Enemy[];
-  auraRadius: number;
   auraBuffs: Record<string, BuffMods>;
   private commanderId: string;
   private buffedEnemies = new Set<Enemy>();
-  private auraDisc: Phaser.GameObjects.Arc;
   private nextAuraCheckAt = 0;
 
   constructor(
@@ -38,7 +34,7 @@ export class CommanderEnemy extends Enemy {
     super(scene, x, y, {
       textureKey: "px-commander",
       kind: "commander",
-      maxHp: 140,
+      maxHp: 500,
       aggroRadius: 480,
       contactDamage: 10,
       bodyW: 22,
@@ -52,13 +48,7 @@ export class CommanderEnemy extends Enemy {
       attributes: { VIT: 10, MIG: 6, AGI: 6, INT: 8, INS: 8, PRE: 18 },
     });
     this.commanderId = `commander-${++commanderCounter}`;
-    this.auraRadius = opts.auraRadius ?? DEFAULT_AURA_RADIUS;
     this.auraBuffs = opts.auraBuffs ?? DEFAULT_AURA_BUFFS;
-
-    this.auraDisc = scene.add
-      .circle(x, y, this.auraRadius, 0xffd060, 0.07)
-      .setStrokeStyle(2, 0xffd060, 0.55)
-      .setDepth(50);
   }
 
   setAuraBuffs(buffs: Record<string, BuffMods>): void {
@@ -83,34 +73,28 @@ export class CommanderEnemy extends Enemy {
       }
     }
 
-    this.auraDisc.setPosition(this.sprite.x, this.sprite.y);
-
     if (now >= this.nextAuraCheckAt) {
       this.nextAuraCheckAt = now + 150;
       this.refreshAura();
     }
   }
 
+  // Buff range is the whole map for now: every living enemy of a buffable
+  // kind receives the matching buff, regardless of distance.
   private refreshAura(): void {
     if (!this.getEnemies) return;
-    const enemies = this.getEnemies();
-    const r2 = this.auraRadius * this.auraRadius;
-    const insideNow = new Set<Enemy>();
-    for (const e of enemies) {
+    const targets = new Set<Enemy>();
+    for (const e of this.getEnemies()) {
       if (e === this || !e.alive) continue;
-      const dx = e.sprite.x - this.sprite.x;
-      const dy = e.sprite.y - this.sprite.y;
-      if (dx * dx + dy * dy <= r2) insideNow.add(e);
+      if (this.auraBuffs[e.kind]) targets.add(e);
     }
-    for (const e of insideNow) {
+    for (const e of targets) {
       if (this.buffedEnemies.has(e)) continue;
-      const buff = this.auraBuffs[e.kind];
-      if (!buff) continue;
-      e.applyBuff(this.commanderId, buff);
+      e.applyBuff(this.commanderId, this.auraBuffs[e.kind]);
       this.buffedEnemies.add(e);
     }
     for (const e of this.buffedEnemies) {
-      if (!insideNow.has(e)) {
+      if (!targets.has(e)) {
         e.removeBuff(this.commanderId);
         this.buffedEnemies.delete(e);
       }
@@ -120,13 +104,11 @@ export class CommanderEnemy extends Enemy {
   protected onDeath(): void {
     for (const e of this.buffedEnemies) e.removeBuff(this.commanderId);
     this.buffedEnemies.clear();
-    this.auraDisc.setVisible(false);
     super.onDeath();
   }
 
   respawn(): void {
     super.respawn();
-    this.auraDisc.setVisible(true);
     this.nextAuraCheckAt = 0;
   }
 }

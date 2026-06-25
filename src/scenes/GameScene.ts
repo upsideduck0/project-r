@@ -552,6 +552,10 @@ export class GameScene extends Phaser.Scene {
     this.attackHitbox.setData("damage", w.damage);
     this.attackHitbox.setData("knockX", this.player.facing * w.knockX);
     this.attackHitbox.setData("knockY", w.knockY);
+    // Fresh per-swing hit set so each enemy only takes one tick of damage
+    // during a single swing, even while overlapping the hitbox for several
+    // frames.
+    this.attackHitbox.setData("hitSet", new Set<Enemy>());
     body.updateFromGameObject();
     this.time.delayedCall(w.swingDurationMs, () => {
       this.attackHitbox.setFillStyle(0xffe680, 0);
@@ -612,13 +616,17 @@ export class GameScene extends Phaser.Scene {
     let ox: number;
     let oy: number;
     if (isSword && swinging) {
-      // Three discrete swing keyframes: windup, strike, follow-through.
+      // Five discrete swing keyframes: high windup -> cocked -> strike ->
+      // follow-through -> recovery. Snapped (no tweening) so the swing
+      // reads as a flipbook rather than a tween.
       const t = elapsed / w.swingDurationMs;
-      const frame = t < 1 / 3 ? 0 : t < 2 / 3 ? 1 : 2;
+      const frame = Math.min(4, Math.floor(t * 5));
       const SWING_FRAMES: Array<{ rot: number; ox: number; oy: number }> = [
-        { rot: -1.4, ox: 4, oy: -10 },
+        { rot: -1.7, ox: -2, oy: -16 },
+        { rot: -0.9, ox: 10, oy: -10 },
         { rot: 0.2, ox: 22, oy: -2 },
-        { rot: 1.5, ox: 14, oy: 14 },
+        { rot: 1.1, ox: 20, oy: 8 },
+        { rot: 1.7, ox: 12, oy: 16 },
       ];
       const f = SWING_FRAMES[frame];
       rot = facing * f.rot;
@@ -807,6 +815,11 @@ export class GameScene extends Phaser.Scene {
   private onMeleeHit(enemySprite: Phaser.Physics.Arcade.Sprite): void {
     const enemy = enemySprite.getData("enemy") as Enemy | undefined;
     if (!enemy || !enemy.alive) return;
+    const hitSet = this.attackHitbox.getData("hitSet") as Set<Enemy> | undefined;
+    if (hitSet) {
+      if (hitSet.has(enemy)) return;
+      hitSet.add(enemy);
+    }
     const dmg = (this.attackHitbox.getData("damage") as number) ?? 0;
     const knockX = (this.attackHitbox.getData("knockX") as number) ?? 0;
     const knockY = (this.attackHitbox.getData("knockY") as number) ?? -120;
