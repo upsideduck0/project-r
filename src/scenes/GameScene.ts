@@ -841,8 +841,15 @@ export class GameScene extends Phaser.Scene {
     if (target === "player" || target === "p") {
       return "[DEV] PLAYER stats\n" + this.playerStats.debugString();
     }
-    const enemy = this.enemyEntities.find((e) => e.alive && e.kind === target);
-    if (!enemy) return `[DEV] no living enemy of kind '${target}'`;
+    const mx = this.input.activePointer.worldX;
+    const my = this.input.activePointer.worldY;
+    const candidates = this.enemyEntities.filter((e) => e.alive && e.kind === target);
+    if (candidates.length === 0) return `[DEV] no living enemy of kind '${target}'`;
+    const enemy = candidates.reduce((best, e) => {
+      const d = Phaser.Math.Distance.Between(e.sprite.x, e.sprite.y, mx, my);
+      const bd = Phaser.Math.Distance.Between(best.sprite.x, best.sprite.y, mx, my);
+      return d < bd ? e : best;
+    });
     return `[DEV] ${target.toUpperCase()} stats\n` + enemy.stats.debugString();
   }
 

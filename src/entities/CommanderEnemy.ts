@@ -68,7 +68,7 @@ export class CommanderEnemy extends Enemy {
 
     // Bow shot.
     if (dist < BOW_RANGE && now >= this.nextBowAt && this.ability) {
-      this.nextBowAt = now + this.attackIntervalMs();
+      this.nextBowAt = now + 3000;
       this.fireBow(player);
     }
   }

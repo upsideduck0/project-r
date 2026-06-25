@@ -619,9 +619,7 @@ export abstract class Enemy {
     if (this.buffSources.size > 0) this.showBuffGlow();
   }
 
-  protected onDeath(): void {
-    this.scene.time.delayedCall(this.respawnMs, () => this.respawn());
-  }
+  protected onDeath(): void {}
 
   distanceTo(p: PlayerView): number {
     return Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, p.x, p.y);
