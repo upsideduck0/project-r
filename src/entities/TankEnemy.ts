@@ -3,7 +3,7 @@ import { Enemy, PlayerView } from "./Enemy";
 import { SKILLS } from "../data/skills";
 import { computeStatsAtLevel } from "../systems/stats/formulas";
 
-const TANK_ATTRS = { VIT: 22, MIG: 10, AGI: 2, INT: 2, INS: 2, PRE: 4 };
+const TANK_ATTRS = { VIT: 18, MIG: 10, AGI: 2, INT: 2, INS: 2, PRE: 4 };
 const TANK_STATS = computeStatsAtLevel(TANK_ATTRS, 1);
 
 const ALLY_THREAT_RANGE = 160;
