@@ -28,7 +28,7 @@ import {
   zeroMainStats,
   zeroSubStats,
 } from "./types";
-import { deriveMainStats, deriveSubStats } from "./formulas";
+import { computeDerivedMain, computeDerivedSub } from "./formulas";
 import { ModifierSource, StatModifier } from "./modifiers";
 
 export interface StatBlockConfig {
@@ -175,12 +175,12 @@ export class StatBlock {
     for (const a of ATTRIBUTE_KEYS) attrs[a] = applyMods(a, attrs[a]);
     this.finalAttributes = attrs;
 
-    // 2/3. base main/sub: derived (attributes + innate base) or authored
-    // (base values used verbatim).
+    // 2/3. base main/sub: derived (computeStatsAtLevel formula) or authored
+    // (base values used verbatim — enemies hand-bake their sheets).
     const main =
-      this.mainMode === "authored" ? zeroMainStats() : deriveMainStats(attrs);
+      this.mainMode === "authored" ? zeroMainStats() : computeDerivedMain(attrs, this.level);
     const sub =
-      this.subMode === "authored" ? zeroSubStats() : deriveSubStats(attrs);
+      this.subMode === "authored" ? zeroSubStats() : computeDerivedSub(attrs, this.level);
     for (const k of MAIN_STAT_KEYS) main[k] += this.baseMain[k] ?? 0;
     for (const k of SUB_STAT_KEYS) sub[k] += this.baseSub[k] ?? 0;
 

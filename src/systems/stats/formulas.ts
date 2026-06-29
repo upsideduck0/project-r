@@ -58,6 +58,8 @@ export const ATTRIBUTE_TO_SUB: Record<
   PRE: { GEN: 1, AMP: 0.5, LS: 0.3 },
 };
 
+// Legacy linear tables kept for reference but no longer used in the live
+// pipeline — computeStatsAtLevel is the authoritative formula.
 export function deriveMainStats(attrs: AttributeSet): MainStatSet {
   const out = makeRecord(MAIN_STAT_KEYS);
   for (const a of ATTRIBUTE_KEYS) {
@@ -77,6 +79,23 @@ export function deriveSubStats(attrs: AttributeSet): SubStatSet {
       out[s] += attrs[a] * (contrib[s] ?? 0);
     }
   }
+  return out;
+}
+
+// Full-set wrappers used by the StatBlock derived pipeline. These call
+// computeStatsAtLevel so the live stat system and the enemy pre-bake are
+// driven by exactly one formula.
+export function computeDerivedMain(attrs: AttributeSet, level: number): MainStatSet {
+  const { main } = computeStatsAtLevel(attrs, level);
+  const out = makeRecord(MAIN_STAT_KEYS);
+  for (const k of MAIN_STAT_KEYS) out[k] = main[k] ?? 0;
+  return out;
+}
+
+export function computeDerivedSub(attrs: AttributeSet, level: number): SubStatSet {
+  const { sub } = computeStatsAtLevel(attrs, level);
+  const out = makeRecord(SUB_STAT_KEYS);
+  for (const k of SUB_STAT_KEYS) out[k] = sub[k] ?? 0;
   return out;
 }
 

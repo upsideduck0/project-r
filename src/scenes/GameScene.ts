@@ -41,7 +41,6 @@ const GROUND_Y = 480;
 const WALL_THICKNESS = 16;
 
 const PLAYER_SPEED = 220;
-const PLAYER_MAX_HP = 100;
 const JUMP_VELOCITY = 440;
 const JUMP_STAMINA_COST = 15;
 const DASH_SPEED = 620;
@@ -50,10 +49,7 @@ const DASH_STAMINA_COST = 25;
 const DASH_COOLDOWN_MS = 1000;
 const STEP_UP_VELOCITY = 360;
 const DROP_THROUGH_MS = 280;
-
-const MAX_STAMINA = 100;
 const STAMINA_REGEN_PER_SEC = 35;
-const MAX_MANA = 100;
 const MANA_REGEN_PER_SEC = 10;
 
 const HP_POTION_HEAL = 30;
@@ -118,6 +114,10 @@ export class GameScene extends Phaser.Scene {
   private focusUntil = -Infinity;
   private nimbleUntil = -Infinity;
 
+  private get playerMaxHp(): number { return Math.round(this.playerStats.getMain("HP")); }
+  private get playerMaxMp(): number { return Math.round(this.playerStats.getMain("MP")); }
+  private get playerMaxSta(): number { return Math.round(this.playerStats.getMain("STA")); }
+
   constructor() {
     super("GameScene");
   }
@@ -145,6 +145,9 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     this.physics.world.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+
+    // Build the player stat block first — spawnPlayer reads max HP/MP/STA from it.
+    this.playerStats = new StatBlock({ level: 1 });
 
     this.drawParallaxBackground();
     this.solidPlatforms = this.physics.add.staticGroup();
@@ -175,26 +178,6 @@ export class GameScene extends Phaser.Scene {
     this.inventory = new Inventory();
     this.seedInventory();
     this.caster = this.buildSkillCaster();
-
-    // Character stat framework for the player. Attributes are all 0 by design
-    // (the player has no attribute sheet yet). Main stats are authored to match
-    // the gameplay constants so /stats gives accurate output.
-    this.playerStats = new StatBlock({
-      attributes: { VIT: 0, MIG: 0, AGI: 0, INT: 0, INS: 0, PRE: 0 },
-      baseMainStats: {
-        HP: PLAYER_MAX_HP,
-        MP: MAX_MANA,
-        STA: MAX_STAMINA,
-        ATK: 0,
-        DEF: 0,
-        MS: 0,
-        AS: 0,
-        TEN: 0,
-      },
-      mainStatMode: "authored",
-      subStatMode: "authored",
-      level: 1,
-    });
 
     this.buildHud();
     this.hotbarUI = new HotbarUI(
@@ -287,14 +270,14 @@ export class GameScene extends Phaser.Scene {
     this.playerProjectiles.update(dt);
     this.enemyProjectiles.update(dt);
 
-    if (this.player.y > WORLD_HEIGHT + 100) this.damagePlayer(PLAYER_MAX_HP);
+    if (this.player.y > WORLD_HEIGHT + 100) this.damagePlayer(this.playerMaxHp);
 
     this.player.stamina = Math.min(
-      MAX_STAMINA,
+      this.playerMaxSta,
       this.player.stamina + STAMINA_REGEN_PER_SEC * dt,
     );
     this.player.mana = Math.min(
-      MAX_MANA,
+      this.playerMaxMp,
       this.player.mana + MANA_REGEN_PER_SEC * dt,
     );
 
@@ -749,15 +732,15 @@ export class GameScene extends Phaser.Scene {
     let consumed = false;
     switch (stack.itemId) {
       case "hp_potion":
-        if (this.player.hp < PLAYER_MAX_HP) {
-          this.player.hp = Math.min(PLAYER_MAX_HP, this.player.hp + HP_POTION_HEAL);
+        if (this.player.hp < this.playerMaxHp) {
+          this.player.hp = Math.min(this.playerMaxHp, this.player.hp + HP_POTION_HEAL);
           this.flashPlayer(0x60d060, 180);
           consumed = true;
         }
         break;
       case "mp_potion":
-        if (this.player.mana < MAX_MANA) {
-          this.player.mana = Math.min(MAX_MANA, this.player.mana + MP_POTION_RESTORE);
+        if (this.player.mana < this.playerMaxMp) {
+          this.player.mana = Math.min(this.playerMaxMp, this.player.mana + MP_POTION_RESTORE);
           this.flashPlayer(0x6fb6ff, 180);
           consumed = true;
         }
@@ -875,9 +858,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private cmdFullHeal(): string {
-    this.player.hp = PLAYER_MAX_HP;
-    this.player.mana = MAX_MANA;
-    this.player.stamina = MAX_STAMINA;
+    this.player.hp = this.playerMaxHp;
+    this.player.mana = this.playerMaxMp;
+    this.player.stamina = this.playerMaxSta;
     return "[DEV] HP, MP, and STA restored.";
   }
 
@@ -887,9 +870,9 @@ export class GameScene extends Phaser.Scene {
     const target = (args[0] ?? "player").toLowerCase();
     if (target === "player" || target === "p") {
       const live =
-        `HP  ${Math.ceil(this.player.hp)}/${PLAYER_MAX_HP}  ` +
-        `MP  ${Math.ceil(this.player.mana)}/${MAX_MANA}  ` +
-        `STA ${Math.ceil(this.player.stamina)}/${MAX_STAMINA}`;
+        `HP  ${Math.ceil(this.player.hp)}/${this.playerMaxHp}  ` +
+        `MP  ${Math.ceil(this.player.mana)}/${this.playerMaxMp}  ` +
+        `STA ${Math.ceil(this.player.stamina)}/${this.playerMaxSta}`;
       return "[DEV] PLAYER stats\n" + this.playerStats.debugString() + "\nLIVE | " + live;
     }
     const mx = this.input.activePointer.worldX;
@@ -1029,13 +1012,13 @@ export class GameScene extends Phaser.Scene {
         y: this.input.activePointer.worldY,
       }),
       heal: (amount) => {
-        this.player.hp = Math.min(PLAYER_MAX_HP, this.player.hp + amount);
+        this.player.hp = Math.min(this.playerMaxHp, this.player.hp + amount);
       },
       restoreMana: (amount) => {
-        this.player.mana = Math.min(MAX_MANA, this.player.mana + amount);
+        this.player.mana = Math.min(this.playerMaxMp, this.player.mana + amount);
       },
       restoreStamina: (amount) => {
-        this.player.stamina = Math.min(MAX_STAMINA, this.player.stamina + amount);
+        this.player.stamina = Math.min(this.playerMaxSta, this.player.stamina + amount);
       },
       spawnProjectile: (cfg) => this.playerProjectiles.spawn(cfg),
       // Player only relocates in its facing direction (Blink).
@@ -1095,9 +1078,9 @@ export class GameScene extends Phaser.Scene {
     s.setCollideWorldBounds(true);
     s.setMaxVelocity(DASH_SPEED, 900);
     s.setDepth(12); // above enemies (10) and buff halos (5).
-    s.hp = PLAYER_MAX_HP;
-    s.stamina = MAX_STAMINA;
-    s.mana = MAX_MANA;
+    s.hp = this.playerMaxHp;
+    s.stamina = this.playerMaxSta;
+    s.mana = this.playerMaxMp;
     s.facing = 1;
     s.lastAttackAt = -Infinity;
     s.lastHurtAt = -Infinity;
@@ -1259,9 +1242,9 @@ export class GameScene extends Phaser.Scene {
   private drawHud(): void {
     const g = this.hudBars;
     g.clear();
-    this.drawBar(g, 80, 14, 130, 9, this.player.hp / PLAYER_MAX_HP, 0xe04050);
-    this.drawBar(g, 80, 32, 130, 9, this.player.mana / MAX_MANA, 0x6fb6ff);
-    this.drawBar(g, 80, 50, 130, 9, this.player.stamina / MAX_STAMINA, 0xf4d35e);
+    this.drawBar(g, 80, 14, 130, 9, this.player.hp / this.playerMaxHp, 0xe04050);
+    this.drawBar(g, 80, 32, 130, 9, this.player.mana / this.playerMaxMp, 0x6fb6ff);
+    this.drawBar(g, 80, 50, 130, 9, this.player.stamina / this.playerMaxSta, 0xf4d35e);
     this.hpText.setText(`HP  ${Math.ceil(this.player.hp).toString().padStart(3)}`);
     this.mpText.setText(`MP  ${Math.ceil(this.player.mana).toString().padStart(3)}`);
     this.staText.setText(`STA ${Math.ceil(this.player.stamina).toString().padStart(3)}`);
