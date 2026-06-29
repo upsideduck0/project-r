@@ -381,23 +381,23 @@ export function buildWeaponTextures(scene: Phaser.Scene): void {
     g.fillStyle(0x3a2a18, 1);
     g.fillRect(4, 14, 16, 1);
   });
-  drawTex(scene, "wpn-musket", 16, 24, (g) => {
-    // barrel
-    g.fillStyle(0x8090a0, 1);
-    g.fillRect(7, 0, 2, 14);
-    g.fillStyle(0xb0c0d0, 1);
-    g.fillRect(8, 1, 1, 12);
+  drawTex(scene, "wpn-musket", 24, 10, (g) => {
+    // wooden stock (left/back end)
+    g.fillStyle(0x6b4a2b, 1);
+    g.fillRect(0, 3, 6, 5);
+    g.fillStyle(0x7a5535, 1);
+    g.fillRect(0, 3, 3, 5);
     // lock body
     g.fillStyle(0x607080, 1);
-    g.fillRect(5, 12, 5, 3);
-    // flintlock hammer
+    g.fillRect(5, 3, 5, 4);
+    // flintlock hammer (small protrusion above lock)
     g.fillStyle(0x506070, 1);
-    g.fillRect(3, 12, 2, 3);
-    // wooden stock
-    g.fillStyle(0x6b4a2b, 1);
-    g.fillRect(6, 15, 4, 9);
-    g.fillStyle(0x7a5535, 1);
-    g.fillRect(5, 21, 6, 3);
+    g.fillRect(6, 1, 2, 3);
+    // barrel (long tube pointing right)
+    g.fillStyle(0x8090a0, 1);
+    g.fillRect(9, 4, 14, 2);
+    g.fillStyle(0xb0c0d0, 1);
+    g.fillRect(10, 4, 12, 1);
   });
   drawTex(scene, "proj-arrow", 18, 8, (g) => {
     g.fillStyle(0x6b4a2b, 1);

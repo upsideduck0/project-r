@@ -38,6 +38,7 @@ export class ThiefEnemy extends Enemy {
       heldWeaponOffsetX: 8,
       heldWeaponOffsetY: 4,
       heldWeaponRotation: 0.35,
+      weaponDamage: 2,
     });
     this.addSkill(SKILLS.shadowstep);
   }
@@ -74,7 +75,6 @@ export class ThiefEnemy extends Enemy {
         if (!this.aggressive && this.castSkill(SKILLS.shadowstep, now)) {
           this.aggressive = true;
           this.hitsInAggro = 0;
-          this.tryAttackPlayer(now, { vit: player.vit, def: player.def });
           return;
         }
         const speed = this.moveSpeedPx();

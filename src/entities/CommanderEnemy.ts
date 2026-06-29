@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { Enemy, PlayerView } from "./Enemy";
-import { SKILLS } from "../data/skills";
+import { SKILLS, SkillStatMod } from "../data/skills";
 import { computeStatsAtLevel } from "../systems/stats/formulas";
 
 const COMMANDER_ATTRS = { VIT: 12, MIG: 4, AGI: 4, INT: 8, INS: 10, PRE: 18 };
@@ -26,6 +26,8 @@ export class CommanderEnemy extends Enemy {
   private buffBroadcastAt: number | null = null;
   private buffsBroadcast = false;
   private nextPlatformHopAt = 0;
+  private nextDriftAt = 0;
+  private driftVx = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, {
@@ -45,8 +47,8 @@ export class CommanderEnemy extends Enemy {
       subStats: COMMANDER_STATS.sub,
       heldWeaponTexture: "wpn-musket",
       heldWeaponScale: 1,
-      heldWeaponOffsetX: 10,
-      heldWeaponOffsetY: 2,
+      heldWeaponOffsetX: 6,
+      heldWeaponOffsetY: 0,
       heldWeaponRotation: 0,
     });
     this.addSkill(SKILLS.reinforcements);
@@ -105,7 +107,13 @@ export class CommanderEnemy extends Enemy {
       body.setVelocityX(speed * dirAway);
       this.sprite.setFlipX(player.x < this.sprite.x);
     } else {
-      body.setVelocityX(0);
+      // Idle lateral drift: change direction randomly every 1.5–3.5 s.
+      if (now >= this.nextDriftAt) {
+        const dir = Math.random() < 0.5 ? 1 : -1;
+        this.driftVx = Math.random() < 0.25 ? 0 : speed * 0.6 * dir;
+        this.nextDriftAt = now + 1500 + Math.random() * 2000;
+      }
+      body.setVelocityX(this.driftVx);
       this.sprite.setFlipX(player.x < this.sprite.x);
     }
 
@@ -240,8 +248,8 @@ export class CommanderEnemy extends Enemy {
     });
   }
 
-  // Drops a gold orb onto every living ally (and self) with a small stagger.
-  // Each impact applies a flat +DEF buff to that specific target.
+  // Drops a gold orb onto every living ally with a small stagger.
+  // Each impact applies kind-specific stat buffs.
   private broadcastBuff(): void {
     const targets: Enemy[] = this.ability ? this.ability.allies().slice() : [];
     targets.forEach((ally, i) => {
@@ -249,12 +257,26 @@ export class CommanderEnemy extends Enemy {
         if (!this.alive || !ally.alive) return;
         this.dropOrbOnAlly(ally, 0xffd060, 0xfff0a0, (target) => {
           if (!target.alive) return;
-          target.applyStatBuff(`commander_buff:${this.id}`, [
-            { stat: "DEF", op: "flat", value: BUFF_DEF_AMOUNT },
-          ]);
+          target.applyStatBuff(`commander_buff:${this.id}`, this.buffsForKind(target.kind));
         });
       });
     });
+  }
+
+  private buffsForKind(kind: string): SkillStatMod[] {
+    switch (kind) {
+      case "tank":
+        return [
+          { stat: "DEF", op: "flat", value: 200 },
+          { stat: "HP", op: "flat", value: 200 },
+        ];
+      case "thief":
+        return [{ stat: "MS", op: "flat", value: 100 }];
+      case "caster":
+        return [{ stat: "GEN", op: "flat", value: 1.0 }];
+      default:
+        return [{ stat: "DEF", op: "flat", value: BUFF_DEF_AMOUNT }];
+    }
   }
 
   // Shared "arc up, drop down" orb animation used by both heal and buff.

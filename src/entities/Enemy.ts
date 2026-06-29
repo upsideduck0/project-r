@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import { StatBlock } from "../systems/stats/StatBlock";
 import { AttributeSet, MainStatSet, SubStatSet } from "../systems/stats/types";
 import { applyRegen } from "../systems/regen";
-import { tackleDamage } from "../systems/combat";
+import { tackleDamage, mitigateDamage } from "../systems/combat";
 import { ProjectileSpawnConfig } from "../systems/Projectiles";
 import {
   AuraSkillData,
@@ -43,6 +43,9 @@ export interface EnemyConfig {
   heldWeaponOffsetX?: number;
   heldWeaponOffsetY?: number;
   heldWeaponRotation?: number;
+  // Fixed damage dealt per successful attack hit (mitigated by victim DEF).
+  // When 0 the legacy tackleDamage formula is used instead.
+  weaponDamage?: number;
 }
 
 export interface PlayerView {
@@ -68,7 +71,7 @@ export interface EnemyAbilityContext {
 
 const KNOCKBACK_MS = 200;
 // Stat-unit -> pixel conversions (centralized so tuning is one place).
-const MS_TO_PX = 350; // movement: pixels/sec per MS point (MS = 0.01×AGI)
+const MS_TO_PX = 0.35; // movement: pixels/sec per MS point (MS = 10×AGI)
 const ATTACK_INTERVAL_BASE = 2550; // attack interval ms = BASE / AS
 const JUMP_BASE = 420; // upward velocity floor — tuned so the slowest jumper
                        // (AGI 2 tank) clears the lower-to-upper platform gap.
@@ -142,6 +145,7 @@ export abstract class Enemy {
   private nextAttackBonus = 0;
   private nextAttackBonusUntil = 0;
   private caster?: SkillCaster;
+  private weaponDamageAmount: number;
 
   constructor(scene: Phaser.Scene, x: number, y: number, cfg: EnemyConfig) {
     this.id = `enemy-${++enemyIdCounter}`;
@@ -169,6 +173,7 @@ export abstract class Enemy {
     this.hp = this.maxHp;
     this.mp = this.maxMp;
     this.sta = this.maxSta;
+    this.weaponDamageAmount = cfg.weaponDamage ?? 0;
 
     this.sprite = scene.physics.add.sprite(x, y, cfg.textureKey);
     this.sprite.setCollideWorldBounds(true);
@@ -511,6 +516,11 @@ export abstract class Enemy {
   }
 
   private refreshMaxFromStats(): void {
+    const newMaxHp = Math.round(this.stats.getMain("HP")) || 1;
+    if (newMaxHp !== this.maxHp) {
+      this.maxHp = newMaxHp;
+      if (this.hp > this.maxHp) this.hp = this.maxHp;
+    }
     this.maxMp = Math.max(this.maxMp, Math.round(this.stats.getMain("MP")));
     this.maxSta = Math.max(this.maxSta, Math.round(this.stats.getMain("STA")));
   }
@@ -670,14 +680,12 @@ export abstract class Enemy {
     if (now - this.lastAttackAt < this.attackIntervalMs()) return null;
     this.lastAttackAt = now;
     this.triggerWeaponSwing(this.attackIntervalMs() * 0.55);
-    // Tackle damage = |VIT diff| - victim DEF (clamped at 0). Weapons are
-    // the primary source of damage; tackles are a small nudge for chunky
-    // attackers ramming weaker targets.
-    let dmg = tackleDamage(
-      this.stats.getAttributes().VIT,
-      victim.vit,
-      victim.def,
-    );
+    let dmg: number;
+    if (this.weaponDamageAmount > 0) {
+      dmg = mitigateDamage(this.weaponDamageAmount, victim.def);
+    } else {
+      dmg = tackleDamage(this.stats.getAttributes().VIT, victim.vit, victim.def);
+    }
     if (now < this.nextAttackBonusUntil) {
       dmg += this.nextAttackBonus;
       this.nextAttackBonus = 0;

@@ -32,6 +32,7 @@ export class FighterEnemy extends Enemy {
       heldWeaponOffsetX: 12,
       heldWeaponOffsetY: 4,
       heldWeaponRotation: 0.35,
+      weaponDamage: 10,
     });
     this.addSkill(SKILLS.battle_rush);
   }

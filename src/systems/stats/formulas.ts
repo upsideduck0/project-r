@@ -108,7 +108,7 @@ export function computeDerivedSub(attrs: AttributeSet, level: number): SubStatSe
 //   STA = (100 +  5*L) × (1 + 0.05×MIG + 0.05×AGI + 0.01×PRE)
 //   ATK = (10 + 0.1*L) + 3×MIG + 2×INT + 1×PRE
 //   DEF = (10 + 0.1*L) + 3×VIT + 1×PRE
-//   MS  = 0.01×AGI          (unit: see MS_TO_PX in Enemy.ts)
+//   MS  = 10×AGI             (unit: see MS_TO_PX in Enemy.ts)
 //   AS  = 7 + 0.05×AGI
 //   TEN = 0.3×VIT
 export function computeStatsAtLevel(
@@ -131,7 +131,7 @@ export function computeStatsAtLevel(
     STA: round(staBase * (1 + 0.05 * a.MIG + 0.05 * a.AGI + 0.01 * a.PRE)),
     ATK: round(atkBase + 3 * a.MIG + 2 * a.INT + 1 * a.PRE),
     DEF: round(defBase + 3 * a.VIT + 1 * a.PRE),
-    MS:  round(0.01 * a.AGI),
+    MS:  round(10 * a.AGI),
     AS:  round(7 + 0.05 * a.AGI),
     TEN: round(0.3 * a.VIT),
   };
