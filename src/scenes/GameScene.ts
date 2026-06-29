@@ -176,12 +176,21 @@ export class GameScene extends Phaser.Scene {
     this.seedInventory();
     this.caster = this.buildSkillCaster();
 
-    // Character stat framework for the player. Per the current spec the
-    // player starts at 0 across the board — every attribute, every main and
-    // sub stat. Authored mode skips the attribute-derive table so the zeros
-    // pass straight through.
+    // Character stat framework for the player. Attributes are all 0 by design
+    // (the player has no attribute sheet yet). Main stats are authored to match
+    // the gameplay constants so /stats gives accurate output.
     this.playerStats = new StatBlock({
       attributes: { VIT: 0, MIG: 0, AGI: 0, INT: 0, INS: 0, PRE: 0 },
+      baseMainStats: {
+        HP: PLAYER_MAX_HP,
+        MP: MAX_MANA,
+        STA: MAX_STAMINA,
+        ATK: 0,
+        DEF: 0,
+        MS: 0,
+        AS: 0,
+        TEN: 0,
+      },
       mainStatMode: "authored",
       subStatMode: "authored",
       level: 1,
@@ -877,7 +886,11 @@ export class GameScene extends Phaser.Scene {
   private cmdStats(args: string[]): string {
     const target = (args[0] ?? "player").toLowerCase();
     if (target === "player" || target === "p") {
-      return "[DEV] PLAYER stats\n" + this.playerStats.debugString();
+      const live =
+        `HP  ${Math.ceil(this.player.hp)}/${PLAYER_MAX_HP}  ` +
+        `MP  ${Math.ceil(this.player.mana)}/${MAX_MANA}  ` +
+        `STA ${Math.ceil(this.player.stamina)}/${MAX_STAMINA}`;
+      return "[DEV] PLAYER stats\n" + this.playerStats.debugString() + "\nLIVE | " + live;
     }
     const mx = this.input.activePointer.worldX;
     const my = this.input.activePointer.worldY;
